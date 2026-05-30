@@ -2750,7 +2750,7 @@ import logging
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
-WEBHOOK_HOST = 'https://YOUR_APP.onrender.com'  # keyinroq o'zgartiramiz
+WEBHOOK_HOST = 'https://ilm-kelajak-bot.onrender.com'  # keyinroq o'zgartiramiz
 WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
 WEBHOOK_URL  = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
