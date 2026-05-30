@@ -2749,32 +2749,23 @@ async def process_ad_content(message: types.Message, state: FSMContext):
 import logging
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
- 
-# PythonAnywhere sozlamalari
-WEBHOOK_HOST = 'https://571MuhammadSolih571.pythonanywhere.com'
+
+WEBHOOK_HOST = 'https://YOUR_APP.onrender.com'  # keyinroq o'zgartiramiz
 WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
 WEBHOOK_URL  = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
- 
+
 async def on_startup(app: web.Application) -> None:
     logging.basicConfig(level=logging.INFO)
-    # load_users_to_cache() — bu yerda CHAQIRMANG, yuqorida allaqachon chaqirilgan
     await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
-    logging.info(f"Webhook o'rnatildi: {WEBHOOK_URL}")
- 
+
 async def on_shutdown(app: web.Application) -> None:
     await bot.delete_webhook()
     await bot.session.close()
- 
-# PythonAnywhere WSGI fayli qidiradigan 'application' obyekti
+
 app = web.Application()
 app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
- 
-# Webhook handler
 SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
- 
-# PythonAnywhere WSGI uchun — 'application' nomi bo'lishi SHART
-application = app
- 
+
 if __name__ == "__main__":
-    web.run_app(app, host="127.0.0.1", port=8080)
+    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
