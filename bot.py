@@ -1383,7 +1383,7 @@ async def inlim_menu(message: types.Message):
     await message.answer(
         "🏆 INLIM — Ilm Nuri Olimpiadasi\n\n"
         f"🎯 Repititsion test orqali bilimingizni sinab ko'ring!\n"
-        f"🏅 G'oliblar Prezident, Al-Xorazmiy va Ibn Sino maktablariga yo'l oladi!\n\n"
+        f"🏅 G'oliblar Prezident, Al-Xorazmiy va Ibn Sino maktablariga qanchalik tayyorligini bilib oladi!\n\n"
         f"💰 Joriy sovrin jamg'armasi: {prize:,} so'm\n\n"
         "Quyidagi bo'limlardan birini tanlang 👇",
         reply_markup=inlim_main_keyboard()
