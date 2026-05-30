@@ -2746,27 +2746,35 @@ async def process_ad_content(message: types.Message, state: FSMContext):
 # ═══════════════════════════════════════════════
 # 18. MAIN
 # ═══════════════════════════════════════════════
-from aiogram.webhook.aiohttp_handler import SimpleRequestHandler
+import logging
 from aiohttp import web
-
-# PythonAnywhere uchun Webhook konfiguratsiyasi
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+ 
+# PythonAnywhere sozlamalari
 WEBHOOK_HOST = 'https://571MuhammadSolih571.pythonanywhere.com'
-WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'  # BOT_TOKEN o'zgaruvchisi kodingizda bor deb hisoblaymiz
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-
+WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
+WEBHOOK_URL  = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+ 
 async def on_startup(app: web.Application) -> None:
     logging.basicConfig(level=logging.INFO)
-    load_users_to_cache()
-    # Telegram serveriga "so'rovlarni shu URL-ga yubor" deb buyruq beramiz
+    # load_users_to_cache() — bu yerda CHAQIRMANG, yuqorida allaqachon chaqirilgan
     await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
-
-# PythonAnywhere WSGI fayli qidiradigan 'app' obyekti
+    logging.info(f"Webhook o'rnatildi: {WEBHOOK_URL}")
+ 
+async def on_shutdown(app: web.Application) -> None:
+    await bot.delete_webhook()
+    await bot.session.close()
+ 
+# PythonAnywhere WSGI fayli qidiradigan 'application' obyekti
 app = web.Application()
-
-# Kelayotgan so'rovlarni aiogram dispatcher-ga yo'naltirish
-SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
-
 app.on_startup.append(on_startup)
-
+app.on_shutdown.append(on_shutdown)
+ 
+# Webhook handler
+SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+ 
+# PythonAnywhere WSGI uchun — 'application' nomi bo'lishi SHART
+application = app
+ 
 if __name__ == "__main__":
     web.run_app(app, host="127.0.0.1", port=8080)
