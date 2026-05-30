@@ -1403,7 +1403,7 @@ async def inlim_sponsors(callback: types.CallbackQuery):
         text = "🤝 Homiylarimiz\n\n"
         for i, s in enumerate(sponsors, 1):
             name = s.get('name', 'Noaniq')
-text += f"{i}. {name}\n"
+                text += f"{i}. {name}\n"
             tg = s.get("telegram", "")
             ig = s.get("instagram", "")
             if tg:
