@@ -38,7 +38,7 @@ PAYMENT_AMOUNT        = 10000
 PAYMENT_OWNER         = "Ilm Nuri Markazi"
 
 # INLIM sozlamalari
-INLIM_SETTINGS = {
+RO'YXATDAN O'TISH_SETTINGS = {
     "prize_fund": 10000000,
     "sponsors": [],
     "test_dates": [
@@ -744,11 +744,11 @@ def inlim_main_keyboard():
                               callback_data="inlim_sponsor_apply")],
     ])
 
-@dp.message(F.text == "🏆 INLIM")
+@dp.message(F.text == "🏆 RO'YXATDAN O'TISH")
 async def inlim_menu(message: types.Message):
     prize = INLIM_SETTINGS.get("prize_fund", 0)
     await message.answer(
-        "🏆 INLIM — Ilm Nuri Olimpiadasi\n\n"
+        "🏆 Ilm Nuri Olimpiadasi\n\n"
         f"🎯 Repititsion test orqali bilimingizni sinab ko'ring!\n"
         f"💰 Joriy sovrin jamg'armasi: {prize:,} so'm\n\n"
         "Quyidagi bo'limlardan birini tanlang 👇",
