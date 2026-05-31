@@ -2628,10 +2628,15 @@ async def keep_alive_ping():
         await asyncio.sleep(14 * 60)
 
 async def on_startup(app: web.Application) -> None:
-    logging.info(f"Webhook URL: {WEBHOOK_URL}")
+    logging.info(f"Webhook o'rnatilmoqda: {WEBHOOK_URL}")
+    # Avval eski webhook'ni o'chirish
     await bot.delete_webhook()
-    await bot.set_webhook(url=WEBHOOK_URL)
-    logging.info("✅ Webhook o'rnatildi!")
+    # Yangi webhook'ni o'rnatish
+    result = await bot.set_webhook(url=WEBHOOK_URL)
+    if result:
+        logging.info("✅ Webhook muvaffaqiyatli o'rnatildi!")
+    else:
+        logging.error("❌ Webhook o'rnatilmadi!")
     asyncio.create_task(keep_alive_ping())
 
 async def on_shutdown(app: web.Application) -> None:
