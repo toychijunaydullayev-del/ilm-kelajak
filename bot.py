@@ -2622,13 +2622,8 @@ async def on_startup(app: web.Application) -> None:
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    # Webhook faqat o'rnatilmagan bo'lsa o'rnatiladi
-    webhook_info = await bot.get_webhook_info()
-    if webhook_info.url != WEBHOOK_URL:
-        await bot.set_webhook(url=WEBHOOK_URL)
-        logging.info("✅ Webhook o'rnatildi!")
-    else:
-        logging.info("✅ Webhook allaqachon o'rnatilgan!")
+    await bot.set_webhook(url=WEBHOOK_URL)
+    logging.info("✅ Webhook o'rnatildi!")
     asyncio.create_task(keep_alive_ping())
 
 
