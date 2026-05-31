@@ -509,7 +509,7 @@ def main_menu_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🆓 Bepul testlar"), KeyboardButton(text="💎 Pullik testlar")],
-            [KeyboardButton(text="🏆 INLIM"),          KeyboardButton(text="👤 Profilim")],
+            [KeyboardButton(text="🏆 RO'YXATDAN O'TISH"),          KeyboardButton(text="👤 Profilim")],
             [KeyboardButton(text="🔗 Do'stlarni taklif et")],
         ],
         resize_keyboard=True,
