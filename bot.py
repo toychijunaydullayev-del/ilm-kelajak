@@ -2622,14 +2622,14 @@ async def on_startup(app: web.Application) -> None:
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    await bot.set_webhook(url=WEBHOOK_URL)
+    await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
     logging.info("✅ Webhook o'rnatildi!")
     asyncio.create_task(keep_alive_ping())
 
 
 async def on_shutdown(app: web.Application) -> None:
     logging.info("Bot o'chmoqda...")
-    await bot.session.close()
+    #await bot.session.close()
 
 
 async def health_check(request):
