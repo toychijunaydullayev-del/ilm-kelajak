@@ -39,9 +39,13 @@ PAYMENT_OWNER         = "Ilm Nuri Markazi"
 
 # INLIM sozlamalari
 INLIM_SETTINGS = {
-    "prize_fund": 0,
+    "prize_fund": 10000000,
     "sponsors": [],
-    "test_dates": [],
+    "test_dates": [
+        {"date": "2025-06-15", "grade": "1-6 sinf", "subject": "Matematika"},
+        {"date": "2025-06-22", "grade": "1-6 sinf", "subject": "Matematika"},
+        {"date": "2025-06-29", "grade": "1-6 sinf", "subject": "Matematika"},
+    ],
     "registration_open": True,
     "admin_username": "@admin",
 }
@@ -53,19 +57,23 @@ def is_admin(user_id: int) -> bool:
 # ═══════════════════════════════════════════════
 async def is_subscribed(user_id: int) -> bool:
     try:
+        # bot global o'zgaruvchi, lekin funksiya ichida ishlatish mumkin
         member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
         return member.status not in ("left", "kicked")
     except Exception:
         return False
 
 # ═══════════════════════════════════════════════
-# Google Sheets ulanish
-# ═══════════════════════════════════════════════
+# Google Sheets ulanish (xatolikni yumshatish)
 def get_sheet():
-    scopes = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
-    client = gspread.authorize(creds)
-    return client.open_by_key(SHEETS_ID).sheet1
+    try:
+        scopes = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+        client = gspread.authorize(creds)
+        return client.open_by_key(SHEETS_ID).sheet1
+    except Exception as e:
+        print(f"⚠️ Google Sheets ulanish xatosi: {e}")
+        return None  # None qaytar, funksiyalar tekshirsin
 
 def get_orders_sheet():
     scopes = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -2597,60 +2605,55 @@ async def add_vab_cmd(message: types.Message):
 # 18. MAIN — WEBHOOK (Render uchun)
 # ═══════════════════════════════════════════════
 from aiohttp import web
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler
 
-# Render ilovangizning URL manzili — environment variable orqali o'rnating
-WEBHOOK_HOST = os.environ.get("RENDER_EXTERNAL_URL", "https://your-app-name.onrender.com")
+# MUHIM: Webhook URL to'g'ri o'rnatilishi kerak
+RENDER_HOSTNAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "ilm-kelajak-bot.onrender.com")
+if not RENDER_HOSTNAME.startswith("https://"):
+    RENDER_HOSTNAME = f"https://{RENDER_HOSTNAME}"
 WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
-WEBHOOK_URL  = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-PORT         = int(os.environ.get("PORT", 8080))
+WEBHOOK_URL = f"{RENDER_HOSTNAME}{WEBHOOK_PATH}"
+PORT = int(os.environ.get("PORT", 10000))
 
 async def keep_alive_ping():
-    """Render'da bot o'chmasligini ta'minlaydi — har 14 daqiqada o'z-o'ziga ping"""
-    await asyncio.sleep(60)  # bot to'liq ishga tushguncha kut
+    """Render'da bot o'chmasligini ta'minlaydi"""
+    await asyncio.sleep(60)
     while True:
         try:
             async with aiohttp.ClientSession() as session:
-                url = os.environ.get("RENDER_EXTERNAL_URL", "https://your-app.onrender.com")
-                async with session.get(f"{url}/health", timeout=aiohttp.ClientTimeout(total=10)):
+                async with session.get(f"{RENDER_HOSTNAME}/health", timeout=aiohttp.ClientTimeout(total=10)):
                     pass
         except Exception:
             pass
-        await asyncio.sleep(14 * 60)  # 14 daqiqa
+        await asyncio.sleep(14 * 60)
+
 async def on_startup(app: web.Application) -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
+    logging.info(f"Webhook URL: {WEBHOOK_URL}")
+    await bot.delete_webhook()
+    await bot.set_webhook(url=WEBHOOK_URL)
     logging.info("✅ Webhook o'rnatildi!")
     asyncio.create_task(keep_alive_ping())
 
-
 async def on_shutdown(app: web.Application) -> None:
-    pass  # hech narsa qilmasin
-
+    logging.info("Bot o'chmoqda...")
+    await bot.delete_webhook()
+    await bot.session.close()
 
 async def health_check(request):
-    """Render health check uchun"""
     return web.Response(text="OK", status=200)
-
 
 def create_app():
     app = web.Application()
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)
-
-    # Health check endpoint
     app.router.add_get("/", health_check)
     app.router.add_get("/health", health_check)
-
-    # Webhook handler
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
     return app
 
-
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    # Bot va dispatcher global o'zgaruvchilarga allaqachon yaratilgan
+    # load_users_to_cache() allaqachon chaqirilgan
     app = create_app()
     web.run_app(app, host="0.0.0.0", port=PORT)
