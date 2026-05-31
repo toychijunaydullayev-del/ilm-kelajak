@@ -2623,7 +2623,6 @@ async def on_startup(app: web.Application) -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     logging.info(f"Webhook URL: {WEBHOOK_URL}")
-    await bot.delete_webhook(drop_pending_updates=True)
     await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
     logging.info("✅ Webhook o'rnatildi!")
     asyncio.create_task(keep_alive_ping())
