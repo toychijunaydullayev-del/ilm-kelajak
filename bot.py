@@ -2631,7 +2631,6 @@ async def on_startup(app: web.Application) -> None:
 
 async def on_shutdown(app: web.Application) -> None:
     logging.info("Bot o'chmoqda...")
-    await bot.delete_webhook()
     await bot.session.close()
 
 
