@@ -1429,7 +1429,7 @@ async def inlim_process_phone(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("inlim_grade_"), StateFilter(InlimRegistration.grade_group))
 async def inlim_process_grade(callback: types.CallbackQuery, state: FSMContext):
-     grade_map = {
+    grade_map = {           # ← 4 ta bo'sh joy (to'g'ri)
         "inlim_grade_12": "1-2 sinf (Matematika)",
         "inlim_grade_34": "3-4 sinf (Aniq fan)",
         "inlim_grade_56": "5-6 sinf (Tabiiy fan)",
