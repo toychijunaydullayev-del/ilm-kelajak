@@ -38,7 +38,7 @@ PAYMENT_AMOUNT        = 10000
 PAYMENT_OWNER         = "Ilm Nuri Markazi"
 
 # INLIM sozlamalari
-RO'YXATDAN O'TISH_SETTINGS = {
+INLIM_SETTINGS = {
     "prize_fund": 10000000,
     "sponsors": [],
     "test_dates": [
@@ -509,7 +509,7 @@ def main_menu_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🆓 Bepul testlar"), KeyboardButton(text="💎 Pullik testlar")],
-            [KeyboardButton(text="🏆 RO'YXATDAN O'TISH"),          KeyboardButton(text="👤 Profilim")],
+            [KeyboardButton(text="🏆 INLIM"),          KeyboardButton(text="👤 Profilim")],
             [KeyboardButton(text="🔗 Do'stlarni taklif et")],
         ],
         resize_keyboard=True,
@@ -661,7 +661,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.set_state(Registration.full_name)
 
 # ═══════════════════════════════════════════════
-# 11. RO'YXATDAN O'TISH
+# 11. INLIM
 # ═══════════════════════════════════════════════
 @dp.message(Registration.full_name)
 async def process_name(message: types.Message, state: FSMContext):
@@ -744,7 +744,7 @@ def inlim_main_keyboard():
                               callback_data="inlim_sponsor_apply")],
     ])
 
-@dp.message(F.text == "🏆 RO'YXATDAN O'TISH")
+@dp.message(F.text == "🏆 INLIM")
 async def inlim_menu(message: types.Message):
     prize = INLIM_SETTINGS.get("prize_fund", 0)
     await message.answer(
