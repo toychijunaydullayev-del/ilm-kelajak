@@ -64,16 +64,21 @@ async def is_subscribed(user_id: int) -> bool:
         return False
 
 # ═══════════════════════════════════════════════
-# Google Sheets ulanish (xatolikni yumshatish)
 def get_sheet():
     try:
         scopes = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+        # Avval o'zgaruvchidan o'qish
+        creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+        if creds_json:
+            info = json.loads(creds_json)
+            creds = Credentials.from_service_account_info(info, scopes=scopes)
+        else:
+            creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
         client = gspread.authorize(creds)
         return client.open_by_key(SHEETS_ID).sheet1
     except Exception as e:
         print(f"⚠️ Google Sheets ulanish xatosi: {e}")
-        return None  # None qaytar, funksiyalar tekshirsin
+        return None
 
 def get_orders_sheet():
     scopes = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
