@@ -954,7 +954,7 @@ async def inlim_process_grade(callback: types.CallbackQuery, state: FSMContext):
         buttons.append([InlineKeyboardButton(text=label, callback_data=f"inlim_date_{i}")])
 
     await callback.message.answer(
-        f"✅ Tanlandi: {grade_group}\n\n📅 Test sanasini tanlang:",
+        f"✅ Tanlandi: {grade_group}\n\n📅Test vaqti 09:00 da Test sanasini tanlang:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
     )
     await state.set_state(InlimRegistration.test_date)
