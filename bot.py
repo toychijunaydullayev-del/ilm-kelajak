@@ -4,21 +4,23 @@ import random
 import os
 import time
 import json
+import datetime
 import gspread
 import aiohttp
-from aiogram.filters import StateFilter
+
 from google.oauth2.service_account import Credentials
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton,
 )
 
 # ═══════════════════════════════════════════════
-# 1. SOZLAMALAR
+# 1. SOZLAMALAR VA BOT OB YEKTI (DP SOTILISHI)
 # ═══════════════════════════════════════════════
 BOT_TOKEN             = os.environ.get("BOT_TOKEN", "8678044800:AAF9GGeTK1qS1dJMQayrq-J3qtKMhf39wdA")
 ADMIN_ID              = 506343083
@@ -26,6 +28,10 @@ TEST_DURATION_SECONDS = 45 * 60
 CHANNEL_LINK          = "https://t.me/IlmNuri_Markazi"
 CHANNEL_USERNAME      = "@IlmNuri_Markazi"
 SHEETS_ID             = "1gvaXkcJStGAUi0DH8eIBaB7R8GVJfC0z2z38mHie6MY"
+
+# Bot va Dispatcher obyektlarini barcha funksiya hamda handlerlardan O'Z VAQTIDA yaratamiz
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
 
 # VAB narxlari
 VAB_PER_CORRECT_ANSWER = 2
@@ -54,7 +60,6 @@ INLIM_SETTINGS = {
 def is_admin(user_id: int) -> bool:
     return user_id == ADMIN_ID
 
-# ═══════════════════════════════════════════════
 async def is_subscribed(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
@@ -66,7 +71,6 @@ async def is_subscribed(user_id: int) -> bool:
 # 2. GOOGLE CREDENTIALS ENHANCED FOR RENDER
 # ═══════════════════════════════════════════════
 def get_credentials(scopes):
-    """Render-da fayl yo'qolganda Google credentials environmentdan parslash uchun."""
     creds_json = os.environ.get("GOOGLE_CREDENTIALS")
     if creds_json:
         try:
@@ -75,7 +79,6 @@ def get_credentials(scopes):
         except Exception as e:
             print(f"⚠️ Environment GOOGLE_CREDENTIALS xato: {e}")
     
-    # Local fallback
     try:
         return Credentials.from_service_account_file("credentials.json", scopes=scopes)
     except Exception as e:
@@ -157,13 +160,11 @@ MOTIVATIONAL_MESSAGES = [
 # ═══════════════════════════════════════════════
 # 3. TEST SAVOLLARI
 # ═══════════════════════════════════════════════
-# [BU YERDAGI TESTS VA PAID_TESTS LUG'ATINI O'ZINGIZNING KODINGIZDAGI HOLATCHA TO'LIQ QOLDIRING]
 TESTS = {
     "1-sinf": [
         {"question": "Hisoblang  2 + 3 + 4 ",
          "options": {"A": "8", "B": "9", "C": "10", "D": "11"},
          "answer": "B", "difficulty": "easy"},
-        # ... qolgan barcha free test savollaringizni aynan shu yerga yozib qo'ying
     ]
 }
 
@@ -172,7 +173,6 @@ PAID_TESTS = {
         {"question": "💎 Sehrli kvadrat: markaziy qator bo'sh katagi?",
          "options": {"A": "4", "B": "2", "C": "8", "D": "1"},
          "answer": "A", "difficulty": "hard"},
-        # ... qolgan barcha pullik test variantlarining to'liq ro'yxati joylashsin
     ]
 }
 
@@ -191,8 +191,8 @@ class AdminState(StatesGroup):
     waiting_for_ad_content = State()
 
 class PaymentState(StatesGroup):
-    waiting_check  = State()
-    waiting_grade  = State()
+    waiting_check   = State()
+    waiting_grade   = State()
 
 class AdminConfirmState(StatesGroup):
     waiting_order_id = State()
@@ -254,12 +254,10 @@ def load_users_to_cache():
         print(f"❌ Yuklashda xato: {e}")
 
 def load_inlim_and_orders_to_cache():
-    """Server o'chib yonganda Renderda orders va inlim cache yo'qolishini oldini oladi (Sheets dan tiklaydi)."""
     global ORDER_CACHE, INLIM_REGISTRATIONS
     ORDER_CACHE.clear()
     INLIM_REGISTRATIONS.clear()
     
-    # INLIM yuklash
     try:
         ws = get_inlim_sheet()
         if ws:
@@ -287,7 +285,6 @@ def load_inlim_and_orders_to_cache():
     except Exception as e:
         print(f"❌ INLIM yuklash xatosi: {e}")
 
-    # Buyurtmalar yuklash
     try:
         ws = get_orders_sheet()
         if ws:
@@ -375,99 +372,6 @@ def add_vab(user_id, amount):
         return new_vab
     return 0
 
-def spend_vab(user_id, amount):
-    user = USERS_CACHE.get(user_id)
-    if user and user["vab"] >= amount:
-        new_vab = user["vab"] - amount
-        update_user_field(user_id, vab=new_vab)
-        return True
-    return False
-
-def _paid_key(grade, variant_index):
-    return f"{grade}:{variant_index}"
-
-def has_paid_test(user_id, grade, variant_index=None):
-    user = USERS_CACHE.get(user_id)
-    if not user:
-        return False
-    paid = user.get("paid_tests", "")
-    keys = set(paid.split(",")) if paid else set()
-    if variant_index is None:
-        return any(k.startswith(f"{grade}:") for k in keys)
-    return _paid_key(grade, variant_index) in keys
-
-def grant_paid_test(user_id, grade, variant_index=0):
-    user = USERS_CACHE.get(user_id)
-    if not user:
-        return
-    paid = user.get("paid_tests", "")
-    keys = set(paid.split(",")) if paid else set()
-    keys.discard("")
-    keys.add(_paid_key(grade, variant_index))
-    update_user_field(user_id, paid_tests=",".join(keys))
-
-def add_result(user_id, grade, score, total, test_type="free"):
-    import datetime
-    now = datetime.datetime.now().strftime("%d.%m %H:%M")
-    tag = "💎" if test_type == "paid" else "🆓"
-    entry = f"{tag}{grade}:{score}/{total}@{now}"
-    user = USERS_CACHE.get(user_id)
-    if not user:
-        return
-    results = user.get("results", "")
-    all_results = results.split("|") if results else []
-    all_results.append(entry)
-    if len(all_results) > 10:
-        all_results = all_results[-10:]
-    update_user_field(user_id, results="|".join(all_results))
-
-def get_all_telegram_ids():
-    return [u["telegram_id"] for u in USERS_CACHE.values() if u["telegram_id"]]
-
-def get_users_count():
-    return len(USERS_CACHE)
-
-def save_order(telegram_id, full_name, grade, photo_file_id, variant_index=0):
-    import datetime
-    ORDER_COUNTER[0] += 1
-    order_id = ORDER_COUNTER[0]
-    ORDER_CACHE[order_id] = {
-        "order_id":      order_id,
-        "telegram_id":   telegram_id,
-        "full_name":     full_name,
-        "grade":         grade,
-        "variant_index": variant_index,
-        "photo_file_id": photo_file_id,
-        "status":        "pending",
-    }
-    try:
-        ws = get_orders_sheet()
-        if ws:
-            ws.append_row([order_id, telegram_id, full_name,
-                           f"{grade} Variant {variant_index+1}",
-                           PAYMENT_AMOUNT, "pending",
-                           datetime.datetime.now().strftime("%d.%m.%Y %H:%M")])
-    except Exception as e:
-        print(f"save_order xato: {e}")
-    return order_id
-
-def confirm_order(order_id):
-    order = ORDER_CACHE.get(order_id)
-    if not order:
-        return None
-    order["status"] = "confirmed"
-    try:
-        ws = get_orders_sheet()
-        if ws:
-            rows = ws.get_all_values()
-            for i, row in enumerate(rows[1:], start=2):
-                if row[0] and int(row[0]) == order_id:
-                    ws.update_cell(i, 6, "confirmed")
-                    break
-    except Exception as e:
-        print(f"confirm_order xato: {e}")
-    return order
-
 # ═══════════════════════════════════════════════
 # 6. YORDAMCHI FUNKSIYALAR
 # ═══════════════════════════════════════════════
@@ -543,7 +447,7 @@ async def send_question(chat_id, state):
                 pass
 
     info_text = build_info_message(grade, index + 1, total,
-                                   q.get("difficulty", "easy"), elapsed, test_type)
+                                    q.get("difficulty", "easy"), elapsed, test_type)
     info_msg  = await bot.send_message(chat_id=chat_id, text=info_text)
 
     options_text = "\n".join([f"{k}) {v}" for k, v in q["options"].items()])
@@ -595,7 +499,6 @@ async def finish_test(chat_id, state):
         update_user_field(user_id, score=score)
         earned_vab = score * VAB_PER_CORRECT_ANSWER
         new_vab    = add_vab(user_id, earned_vab)
-        add_result(user_id, grade, score, total, test_type)
 
         result_text = (
             f"🏁 Test yakunlandi! 💎 Pullik test\n\n"
@@ -619,17 +522,7 @@ async def finish_test(chat_id, state):
     await state.clear()
 
 # ═══════════════════════════════════════════════
-# 9. TIMEOUT Watcher
-# ═══════════════════════════════════════════════
-async def timeout_watcher(chat_id, state):
-    await asyncio.sleep(TEST_DURATION_SECONDS)
-    current_state = await state.get_state()
-    if current_state == TestProcess.answering.state:
-        await bot.send_message(chat_id, "⏰ Vaqt tugadi! Test yakunlanmoqda...")
-        await finish_test(chat_id, state)
-
-# ═══════════════════════════════════════════════
-# 10. /START
+# 9. /START VA RO'YXATDAN O'TISH
 # ═══════════════════════════════════════════════
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -660,9 +553,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.update_data(referred_by=referred_by)
     await state.set_state(Registration.full_name)
 
-# ═══════════════════════════════════════════════
-# 11. INLIM
-# ═══════════════════════════════════════════════
 @dp.message(Registration.full_name)
 async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(full_name=message.text)
@@ -730,7 +620,7 @@ async def process_phone(message: types.Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════
-# 12. INLIM BO'LIMI
+# 10. INLIM BO'LIMI VA REGISTRATION
 # ═══════════════════════════════════════════════
 def inlim_main_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -823,12 +713,8 @@ async def inlim_back(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-# ═══════════════════════════════════════════════
-# 13. INLIM RO'YXATDAN O'TISH (DUBLIKATSIZ EXTRA-INTEGRATION)
-# ═══════════════════════════════════════════════
 @dp.callback_query(F.data == "inlim_register")
 async def inlim_register_start(callback: types.CallbackQuery, state: FSMContext):
-    # Do'stlarga tarqatish haolasi (Telegram Share URL)
     share_url = f"https://t.me/share/url?url=https://t.me/{CHANNEL_USERNAME.lstrip('@')}&text=Prezident%20va%20Al-Xorazmiy%20maktablari%20repititsion%20test%20olimpiadasi%20boshlanmoqda!%21"
     await callback.message.edit_text(
         "📝 Repititsion testga ro'yxatdan o'tish\n\n"
@@ -855,867 +741,32 @@ async def inlim_check_sub(callback: types.CallbackQuery, state: FSMContext):
 
     await callback.message.edit_text(
         "✅ Obuna aniqlandi!\n\n"
-        "Tarqatganingiz uchun rahmat. Ro'yxatni davom ettiramiz 👇",
+        "Tarqatganingiz uchun rahmat. Ro'yxatdan o'tish muvaffaqiyatli davom etmoqda!",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="➡️ Davom etish", callback_data="inlim_check_share")],
-            [InlineKeyboardButton(text="⬅️ Orqaga", callback_data="inlim_register")],
+            [InlineKeyboardButton(text="🏠 Asosiy menyu", callback_data="main_menu")]
         ])
     )
     await callback.answer()
-
-@dp.callback_query(F.data == "inlim_check_share")
-async def inlim_check_share(callback: types.CallbackQuery, state: FSMContext):
-    # FOYDALANUVCHINI IKKI MARTA RO'YXATDAN O'TKAZMASLIK LOGIKASI
-    user = get_user_by_telegram_id(callback.from_user.id)
-    if user:
-        # Bazadagi ma'lumotlarni avtomatik state xotirasiga yuklaymiz
-        await state.update_data(
-            inlim_full_name=user["full_name"],
-            inlim_school=user["school"],
-            inlim_phone=user["phone"]
-        )
-        await callback.message.answer(
-            f"✅ Profilingiz aniqlandi (ma'lumotlarni qayta kiritish shart emas):\n\n"
-            f"👤 Ism: {user['full_name']}\n"
-            f"🏫 Maktab: {user['school']}\n"
-            f"📞 Telefon: {user['phone']}\n\n"
-            f"📚 Repititsion sinf guruhingizni belgilang:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔢 1-2 sinf — Matematika", callback_data="inlim_grade_12")],
-                [InlineKeyboardButton(text="🔢 3-4 sinf — Aniq fan (Matematika)", callback_data="inlim_grade_34")],
-                [InlineKeyboardButton(text="🌿 5-6 sinf — Tabiiy fan", callback_data="inlim_grade_56")],
-            ])
-        )
-        await state.set_state(InlimRegistration.grade_group)
-    else:
-        # Tizimda yo'q foydalanuvchiga noldan so'rash
-        await callback.message.answer(
-            "✅ Ro'yxatdan o'tishni boshlaymiz.\n\n"
-            "👤 Ism va Familiyangizni kiriting:\nMasalan: Alisherov Vali"
-        )
-        await state.set_state(InlimRegistration.full_name)
-    await callback.answer()
-
-@dp.message(InlimRegistration.full_name)
-async def inlim_process_name(message: types.Message, state: FSMContext):
-    await state.update_data(inlim_full_name=message.text)
-    await message.answer("🏫 Maktab raqamingizni yozing:\nMasalan: 45")
-    await state.set_state(InlimRegistration.school)
-
-@dp.message(InlimRegistration.school)
-async def inlim_process_school(message: types.Message, state: FSMContext):
-    await state.update_data(inlim_school=message.text)
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="📲 Kontakt yuborish", request_contact=True)]],
-        resize_keyboard=True,
-    )
-    await message.answer("📞 Telefon raqamingizni yuboring:", reply_markup=keyboard)
-    await state.set_state(InlimRegistration.phone)
-
-@dp.message(InlimRegistration.phone)
-async def inlim_process_phone(message: types.Message, state: FSMContext):
-    phone = message.contact.phone_number if message.contact else message.text
-    await state.update_data(inlim_phone=phone)
-
-    await message.answer(
-        "📚 Sinf guruhingizni tanlang:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔢 1-2 sinf — Matematika", callback_data="inlim_grade_12")],
-            [InlineKeyboardButton(text="🔢 3-4 sinf — Aniq fan (Matematika)", callback_data="inlim_grade_34")],
-            [InlineKeyboardButton(text="🌿 5-6 sinf — Tabiiy fan", callback_data="inlim_grade_56")],
-        ])
-    )
-    await state.set_state(InlimRegistration.grade_group)
-
-@dp.callback_query(F.data.startswith("inlim_grade_"), StateFilter(InlimRegistration.grade_group))
-async def inlim_process_grade(callback: types.CallbackQuery, state: FSMContext):
-    grade_map = {
-        "inlim_grade_12": "1-2 sinf (Matematika)",
-        "inlim_grade_34": "3-4 sinf (Aniq fan)",
-        "inlim_grade_56": "5-6 sinf (Tabiiy fan)",
-    }
-    grade_group = grade_map.get(callback.data, "")
-    await state.update_data(inlim_grade_group=grade_group)
-
-    dates = INLIM_SETTINGS.get("test_dates", [])
-    if not dates:
-        await callback.message.answer(
-            "⚠️ Hozircha test sanalari belgilanmagan.\n"
-            "Admindan so'rang yoki keyinroq urinib ko'ring.",
-            reply_markup=main_menu_keyboard()
-        )
-        await state.clear()
-        await callback.answer()
-        return
-
-    buttons = []
-    for i, d in enumerate(dates):
-        label = f"📅 {d['date']} — {d.get('grade', '')} {d.get('subject', '')}"
-        buttons.append([InlineKeyboardButton(text=label, callback_data=f"inlim_date_{i}")])
-
-    await callback.message.answer(
-        f"✅ Tanlandi: {grade_group}\n\n📅Test vaqti 09:00 da Test sanasini tanlang:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-    )
-    await state.set_state(InlimRegistration.test_date)
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("inlim_date_"), StateFilter(InlimRegistration.test_date))
-async def inlim_process_date(callback: types.CallbackQuery, state: FSMContext):
-    idx   = int(callback.data.split("_")[2])
-    dates = INLIM_SETTINGS.get("test_dates", [])
-    if idx >= len(dates):
-        await callback.answer("Sana topilmadi!", show_alert=True)
-        return
-
-    chosen_date = dates[idx]
-    date_str    = f"{chosen_date['date']} — {chosen_date.get('subject', '')}"
-    await state.update_data(inlim_test_date=date_str)
-
-    await callback.message.answer(
-        f"✅ Tanlangan sana: {date_str}\n\n🖥 Test formatini tanlang:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="💻 Onlayn", callback_data="inlim_format_online")],
-            [InlineKeyboardButton(text="🏢 Oflayn (ILM NURI markazida)",
-                                  callback_data="inlim_format_offline")],
-        ])
-    )
-    await state.set_state(InlimRegistration.test_format)
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("inlim_format_"), StateFilter(InlimRegistration.test_format))
-async def inlim_process_format(callback: types.CallbackQuery, state: FSMContext):
-    fmt_map = {
-        "inlim_format_online":  "💻 Onlayn",
-        "inlim_format_offline": "🏢 Oflayn",
-    }
-    fmt = fmt_map.get(callback.data, "")
-    await state.update_data(inlim_test_format=fmt)
-
-    notice = "⚠️ Diqqat! Sovrin faqat oflayn qatnashganlar uchun!\n\n" if "online" in callback.data else ""
-
-    await callback.message.answer(
-        f"✅ Format: {fmt}\n\n{notice}💳 To'lov usulini tanlang:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text=f"💳 Hozir karta orqali to'lash ({PAYMENT_AMOUNT:,} so'm)",
-                callback_data="inlim_pay_now"
-            )],
-            [InlineKeyboardButton(
-                text="📅 Test kuni to'layman",
-                callback_data="inlim_pay_later"
-            )],
-        ])
-    )
-    await state.set_state(InlimRegistration.payment)
-    await callback.answer()
-
-@dp.callback_query(F.data == "inlim_pay_now", StateFilter(InlimRegistration.payment))
-async def inlim_pay_now(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    await callback.message.answer(
-        f"💳 To'lov ma'lumotlari:\n\n"
-        f"🏦 Karta: {PAYMENT_CARD}\n"
-        f"👤 Egasi: {PAYMENT_OWNER}\n"
-        f"💰 Summa: {PAYMENT_AMOUNT:,} so'm\n\n"
-        f"⚠️ Izohga yozing: {data.get('inlim_full_name', '')} — INLIM\n\n"
-        f"To'lov chekini (screenshot) shu yerga yuboring 👇\n/cancel — bekor"
-    )
-    await state.update_data(inlim_payment_type="Hozir to'lagan")
-    await callback.answer()
-
-@dp.callback_query(F.data == "inlim_pay_later", StateFilter(InlimRegistration.payment))
-async def inlim_pay_later(callback: types.CallbackQuery, state: FSMContext):
-    await _finalize_inlim_registration(callback.from_user.id, state, "Test kuni to'laydi")
-    await callback.answer()
-
-@dp.message(StateFilter(InlimRegistration.payment))
-async def inlim_receive_check(message: types.Message, state: FSMContext):
-    if message.text and message.text.strip() == "/cancel":
-        await message.answer("Bekor qilindi.", reply_markup=main_menu_keyboard())
-        await state.clear()
-        return
-
-    if not message.photo:
-        await message.answer("⚠️ Iltimos, to'lov cheki rasmini yuboring yoki /cancel bosing!")
-        return
-
-    photo_id = message.photo[-1].file_id
-    data     = await state.get_data()
-
-    try:
-        await bot.send_photo(
-            ADMIN_ID,
-            photo=photo_id,
-            caption=(
-                f"💳 INLIM TO'LOV CHEKI!\n\n"
-                f"👤 {data.get('inlim_full_name', '')}\n"
-                f"📚 {data.get('inlim_grade_group', '')}\n"
-                f"📅 {data.get('inlim_test_date', '')}\n"
-                f"📞 {data.get('inlim_phone', '')}\n"
-                f"💰 {PAYMENT_AMOUNT:,} so'm"
-            )
-        )
-    except Exception as e:
-        print(f"Admin INLIM chek xato: {e}")
-
-    await _finalize_inlim_registration(message.from_user.id, state, "Chek yuborildi")
-
-async def _finalize_inlim_registration(telegram_id, state, payment_type):
-    data = await state.get_data()
-    full_name   = data.get("inlim_full_name", "")
-    school      = data.get("inlim_school", "")
-    phone       = data.get("inlim_phone", "")
-    grade_group = data.get("inlim_grade_group", "")
-    test_date   = data.get("inlim_test_date", "")
-    test_format = data.get("inlim_test_format", "")
-
-    reg_id = save_inlim_registration(
-        telegram_id, full_name, school, phone,
-        grade_group, test_date, test_format, payment_type
-    )
-
-    try:
-        await bot.send_message(
-            ADMIN_ID,
-            f"📝 YANGI INLIM RO'YXAT!\n\n"
-            f"🆔 #{reg_id}\n👤 {full_name}\n🏫 {school}\n"
-            f"📞 {phone}\n📚 {grade_group}\n📅 {test_date}\n"
-            f"🖥 {test_format}\n💳 {payment_type}"
-        )
-    except Exception:
-        pass
-
-    await bot.send_message(
-        telegram_id,
-        f"🎉 Ro'yxatdan muvaffaqiyatli o'tdingiz!\n\n"
-        f"🆔 Raqamingiz: #{reg_id}\n"
-        f"👤 {full_name}\n📚 {grade_group}\n"
-        f"📅 {test_date}\n🖥 {test_format}\n💳 {payment_type}\n\n"
-        f"📣 Yangiliklar: {CHANNEL_LINK}\n\nOmad! 🍀",
-        reply_markup=main_menu_keyboard()
-    )
-    await state.clear()
-
-# ═══════════════════════════════════════════════
-# 14. ASOSIY MENYU TUGMALARI
-# ═══════════════════════════════════════════════
-@dp.message(F.text == "🆓 Bepul testlar")
-async def free_tests_menu(message: types.Message):
-    user = get_user_by_telegram_id(message.from_user.id)
-    if not user:
-        await message.answer("Avval /start bosing va ro'yxatdan o'ting!")
-        return
-
-    grade = user["grade"]
-
-    if grade == "noma'lum" or grade not in TESTS:
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="1-sinf"), KeyboardButton(text="2-sinf"), KeyboardButton(text="3-sinf")],
-                [KeyboardButton(text="4-sinf"), KeyboardButton(text="5-sinf"), KeyboardButton(text="6-sinf")],
-            ], resize_keyboard=True,
-        )
-        await message.answer("📚 Avval sinfingizni tanlang:", reply_markup=keyboard)
-        return
-
-    q_count = len(TESTS.get(grade, []))
-    await message.answer(
-        f"🆓 Bepul test: {grade}\n"
-        f"📝 Savollar: {q_count} ta\n"
-        f"⏱ Vaqt: 45 daqiqa\n\n"
-        f"Boshlashga tayyormisiz?",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Boshlash", callback_data="start_free")]
-        ])
-    )
-
-@dp.message(F.text.in_({"1-sinf", "2-sinf", "3-sinf", "4-sinf", "5-sinf", "6-sinf"}))
-async def set_grade_from_menu(message: types.Message):
-    user = get_user_by_telegram_id(message.from_user.id)
-    if not user:
-        await message.answer("Avval /start bosing!")
-        return
-    update_user_field(user["id"], grade=message.text)
-    user["grade"] = message.text
-    grade   = message.text
-    q_count = len(TESTS.get(grade, []))
-    await message.answer(
-        f"✅ Sinf: {grade}\n\n"
-        f"📝 Savollar: {q_count} ta\n\n"
-        f"Boshlashga tayyormisiz?",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Boshlash", callback_data="start_free")]
-        ])
-    )
-
-@dp.message(F.text == "💎 Pullik testlar")
-async def paid_tests_menu(message: types.Message):
-    user = get_user_by_telegram_id(message.from_user.id)
-    if not user:
-        await message.answer("Avval /start bosing!")
-        return
-
-    grades = list(PAID_TESTS.keys())
-    buttons = []
-    for g in grades:
-        has = has_paid_test(user["id"], g)
-        label = f"{'✅' if has else '🔒'} {g}"
-        buttons.append([InlineKeyboardButton(text=label, callback_data=f"paidgrade_{g}")])
-
-    await message.answer(
-        f"💎 Pullik testlar — Sinf tanlang:\n\n"
-        f"✅ — sotib olingan   🔒 — sotib olinmagan\n\n"
-        f"💼 Sizda: {user['vab']} VAB",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-    )
-
-@dp.callback_query(F.data.startswith("paidgrade_"))
-async def paid_grade_selected(callback: types.CallbackQuery):
-    parts = callback.data.split("_")
-    grade = parts[1]
-    
-    user = get_user_by_telegram_id(callback.from_user.id)
-    if not user:
-        # Cache sinxronizatsiya yuz bermagan bo'lsa qayta yuklaydi
-        load_users_to_cache()
-        user = get_user_by_telegram_id(callback.from_user.id)
-        if not user:
-            await callback.answer("Foydalanuvchi topilmadi! Qayta urinib ko'ring.", show_alert=True)
-            return
-
-    variants = PAID_TESTS.get(grade, [])
-    VARIANT_SIZE = 3
-    variant_count = (len(variants) + VARIANT_SIZE - 1) // VARIANT_SIZE
-
-    buttons = []
-    for i in range(variant_count):
-        bought = has_paid_test(user["id"], grade, i)
-        if bought:
-            buttons.append([InlineKeyboardButton(
-                text=f"▶️ Variant {i+1} — Boshlash",
-                callback_data=f"start_paid_{grade}_{i}"
-            )])
-        else:
-            buttons.append([InlineKeyboardButton(
-                text=f"🔒 Variant {i+1} — {PAYMENT_AMOUNT:,} so'm / {VAB_FOR_TEST_PURCHASE} VAB",
-                callback_data=f"buy_variant_{grade}_{i}"
-            )])
-    buttons.append([InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_to_paid_menu")])
-
-    await callback.message.edit_text(
-        f"💎 {grade} — Variantlar:\n💼 Sizda: {user['vab']} VAB",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-    )
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("buy_variant_"))
-async def buy_variant_selected(callback: types.CallbackQuery):
-    parts = callback.data.split("_")
-    grade         = parts[2]
-    variant_index = int(parts[3])
-    user = get_user_by_telegram_id(callback.from_user.id)
-    if not user:
-        await callback.answer("Foydalanuvchi topilmadi!", show_alert=True)
-        return
-
-    await callback.message.edit_text(
-        f"💎 {grade} — Variant {variant_index + 1}\n\n"
-        f"✅ Har to'g'ri javob: +{VAB_PER_CORRECT_ANSWER} VAB\n"
-        f"💰 Narxi: {PAYMENT_AMOUNT:,} so'm yoki {VAB_FOR_TEST_PURCHASE} VAB\n"
-        f"💼 Sizda: {user['vab']} VAB\n\n"
-        f"To'lov usulini tanlang:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text=f"💳 Pul to'lash ({PAYMENT_AMOUNT:,} so'm)",
-                callback_data=f"pay_money_{grade}_{variant_index}"
-            )],
-            [InlineKeyboardButton(
-                text=f"💰 VAB sarflash ({VAB_FOR_TEST_PURCHASE} VAB)",
-                callback_data=f"pay_vab_{grade}_{variant_index}"
-            )],
-            [InlineKeyboardButton(text="⬅️ Orqaga", callback_data=f"paidgrade_{grade}")],
-        ])
-    )
-    await callback.answer()
-
-@dp.callback_query(F.data == "back_to_paid_menu")
-async def back_to_paid_menu(callback: types.CallbackQuery):
-    user = get_user_by_telegram_id(callback.from_user.id)
-    if not user:
-        await callback.answer()
-        return
-    grades = list(PAID_TESTS.keys())
-    buttons = []
-    for g in grades:
-        has = has_paid_test(user["id"], g)
-        label = f"{'✅' if has else '🔒'} {g}"
-        buttons.append([InlineKeyboardButton(text=label, callback_data=f"paidgrade_{g}")])
-    await callback.message.edit_text(
-        f"💎 Pullik testlar\n💼 Sizda: {user['vab']} VAB",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-    )
-    await callback.answer()
-
-@dp.message(F.text == "👤 Profilim")
-async def profile_menu(message: types.Message):
-    user = get_user_by_telegram_id(message.from_user.id)
-    if not user:
-        await message.answer("Avval /start bosing!")
-        return
-
-    results_raw  = user.get("results", "")
-    results_list = [r for r in results_raw.split("|") if r] if results_raw else []
-
-    results_text = "\n📋 Oxirgi natijalar:\n"
-    if results_list:
-        for r in results_list[-5:]:
-            try:
-                tag_grade, rest = r.split(":", 1)
-                score_total, date = rest.split("@", 1)
-                results_text += f"  {tag_grade}: {score_total} — {date}\n"
-            except Exception:
-                results_text += f"  {r}\n"
-    else:
-        results_text = "\n📋 Hali natija yo'q.\n"
-
-    ref_count  = user.get("referral_count", 0)
-    next_bonus = 3 - (ref_count % 3)
-
-    await message.answer(
-        f"👤 Profil\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"📛 Ism: {user['full_name']}\n"
-        f"🏫 Maktab: {user['school']}\n"
-        f"📚 Sinf: {user['grade']}\n"
-        f"📞 Tel: {user['phone']}\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"💰 VAB balansi: {user['vab']} VAB\n"
-        f"👫 Taklif qilinganlar: {ref_count} ta\n"
-        f"🎁 Keyingi bonus uchun: {next_bonus} ta do'st\n"
-        f"━━━━━━━━━━━━━━━━━━"
-        f"{results_text}"
-        f"━━━━━━━━━━━━━━━━━━",
-        reply_markup=main_menu_keyboard()
-    )
-
-@dp.message(F.text == "🔗 Do'stlarni taklif et")
-async def invite_menu(message: types.Message):
-    user = get_user_by_telegram_id(message.from_user.id)
-    if not user:
-        await message.answer("Avval /start bosing!")
-        return
-
-    bot_info   = await bot.get_me()
-    ref_link   = f"https://t.me/{bot_info.username}?start=ref_{message.from_user.id}"
-    ref_count  = user.get("referral_count", 0)
-    next_bonus = 3 - (ref_count % 3)
-
-    await message.answer(
-        f"🔗 Taklif havolangiz:\n{ref_link}\n\n"
-        f"📊 Siz taklif qilganlar: {ref_count} ta\n"
-        f"🎁 Keyingi bonus: {next_bonus} ta do'st kerak\n\n"
-        f"💰 Har 3 ta do'st = {VAB_FOR_REFERRAL} VAB!\n"
-        f"💎 {VAB_FOR_TEST_PURCHASE} VAB to'plang → pullik test bepul!",
-        reply_markup=main_menu_keyboard()
-    )
-
-# ═══════════════════════════════════════════════
-# 15. TO'LOV CALLBACK-LAR
-# ═══════════════════════════════════════════════
-@dp.callback_query(F.data.startswith("pay_money_"))
-async def pay_with_money(callback: types.CallbackQuery, state: FSMContext):
-    parts         = callback.data.split("_")
-    grade         = parts[2]
-    variant_index = int(parts[3])
-    user = get_user_by_telegram_id(callback.from_user.id)
-    if not user:
-        await callback.answer("Foydalanuvchi topilmadi!", show_alert=True)
-        return
-
-    await callback.message.answer(
-        f"💳 To'lov ma'lumotlari:\n\n"
-        f"🏦 Karta: {PAYMENT_CARD}\n"
-        f"👤 Egasi: {PAYMENT_OWNER}\n"
-        f"💰 Summa: {PAYMENT_AMOUNT:,} so'm\n\n"
-        f"⚠️ Izohga yozing: {user['full_name']} — {grade} Variant {variant_index+1}\n\n"
-        f"Chekni yuborish uchun tugmani bosing 👇",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📤 Chek yuborish",
-                                  callback_data=f"send_check_{grade}_{variant_index}")]
-        ])
-    )
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("send_check_"))
-async def send_check_prompt(callback: types.CallbackQuery, state: FSMContext):
-    parts         = callback.data.split("_")
-    grade         = parts[2]
-    variant_index = int(parts[3])
-    user = get_user_by_telegram_id(callback.from_user.id)
-    if not user:
-        await callback.answer("Foydalanuvchi topilmadi!", show_alert=True)
-        return
-
-    await callback.message.answer(
-        f"📤 To'lov cheki rasmini shu yerga yuboring:\n"
-        f"📚 {grade} — Variant {variant_index+1}\n"
-        f"💰 {PAYMENT_AMOUNT:,} so'm\n\nBekor qilish: /cancel"
-    )
-    await state.update_data(paying_user_id=user["id"], paying_grade=grade, paying_variant=variant_index)
-    await state.set_state(PaymentState.waiting_check)
-    await callback.answer()
-
-@dp.message(PaymentState.waiting_check)
-async def receive_payment_check(message: types.Message, state: FSMContext):
-    if message.text and message.text.strip() == "/cancel":
-        await message.answer("Bekor qilindi.", reply_markup=main_menu_keyboard())
-        await state.clear()
-        return
-
-    if not message.photo:
-        await message.answer("⚠️ Iltimos, to'lov cheki rasm formatida bo'lishi shart!")
-        return
-
-    data          = await state.get_data()
-    p_id          = data["paying_user_id"]
-    grade         = data["paying_grade"]
-    variant_index = data.get("paying_variant", 0)
-    user     = get_user_by_id(p_id)
-    photo_id = message.photo[-1].file_id
-
-    order_id = save_order(message.from_user.id, user["full_name"], grade, photo_id,
-                          variant_index=variant_index)
-
-    try:
-        await bot.send_photo(
-            ADMIN_ID,
-            photo=photo_id,
-            caption=(
-                f"💳 YANGI TO'LOV!\n\n"
-                f"📋 Buyurtma: #{order_id}\n"
-                f"👤 {user['full_name']}\n"
-                f"📚 {grade} — Variant {variant_index+1}\n"
-                f"📞 {user['phone']}\n"
-                f"💰 {PAYMENT_AMOUNT:,} so'm"
-            ),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="✅ Tasdiqlash",
-                                         callback_data=f"admin_confirm_{order_id}"),
-                    InlineKeyboardButton(text="❌ Rad etish",
-                                         callback_data=f"admin_reject_{order_id}"),
-                ]
-            ])
-        )
-    except Exception as e:
-        print(f"Admin yuborishda xato: {e}")
-
-    await message.answer(
-        f"✅ Chek qabul qilindi!\n"
-        f"📋 Buyurtma: #{order_id}\n"
-        f"Admin tekshiruvidan so'ng faollashtiriladi.",
-        reply_markup=main_menu_keyboard()
-    )
-    await state.clear()
-
-# ─── ADMIN TO'LOV TASDIQLASH (callback ichida admin tekshirish) ───
-@dp.callback_query(F.data.startswith("admin_confirm_"))
-async def admin_confirm_inline(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Faqat admin!", show_alert=True)
-        return
-
-    order_id = int(callback.data.split("_")[2])
-    order    = confirm_order(order_id)
-    if not order:
-        await callback.answer(f"#{order_id} topilmadi!", show_alert=True)
-        return
-
-    user = get_user_by_telegram_id(order["telegram_id"])
-    if user:
-        vi = order.get("variant_index", 0)
-        grant_paid_test(user["id"], order["grade"], vi)
-        add_vab(user["id"], 50)
-        try:
-            await bot.send_message(
-                order["telegram_id"],
-                f"🎉 To'lovingiz tasdiqlandi!\n\n"
-                f"💎 {order['grade']} — Variant {vi+1} aktivlashtirildi!\n"
-                f"💰 Bonus: +50 VAB\n\n"
-                f"Boshlash uchun '💎 Pullik testlar' tugmasini bosing!",
-                reply_markup=main_menu_keyboard()
-            )
-        except Exception:
-            pass
-
-    try:
-        await callback.message.edit_caption(
-            caption=(callback.message.caption or "") + f"\n\n✅ TASDIQLANDI"
-        )
-    except Exception:
-        pass
-    await callback.answer(f"✅ #{order_id} tasdiqlandi!")
-
-@dp.callback_query(F.data.startswith("admin_reject_"))
-async def admin_reject_inline(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Faqat admin!", show_alert=True)
-        return
-
-    order_id = int(callback.data.split("_")[2])
-    order    = ORDER_CACHE.get(order_id)
-    if not order:
-        await callback.answer(f"#{order_id} topilmadi!", show_alert=True)
-        return
-
-    order["status"] = "rejected"
-    try:
-        await bot.send_message(
-            order["telegram_id"],
-            f"❌ #{order_id} to'lovingiz rad etildi.\n"
-            f"Chek to'liq emas yoki rasm tushunarsiz.\n"
-            f"Qayta to'lov qilishingizni so'raymiz."
-        )
-    except Exception:
-        pass
-
-    try:
-        await callback.message.edit_caption(
-            caption=(callback.message.caption or "") + f"\n\n❌ RAD ETILDI"
-        )
-    except Exception:
-        pass
-    await callback.answer(f"❌ #{order_id} rad etildi!")
-
-@dp.callback_query(F.data.startswith("pay_vab_"))
-async def pay_with_vab(callback: types.CallbackQuery):
-    parts         = callback.data.split("_")
-    grade         = parts[2]
-    variant_index = int(parts[3])
-    user = get_user_by_telegram_id(callback.from_user.id)
-    if not user:
-        await callback.answer("Foydalanuvchi topilmadi!", show_alert=True)
-        return
-
-    if user["vab"] < VAB_FOR_TEST_PURCHASE:
-        await callback.answer(
-            f"❌ VAB yetarli emas!\nKerak: {VAB_FOR_TEST_PURCHASE} VAB\nSizda: {user['vab']} VAB",
-            show_alert=True
-        )
-        return
-
-    if has_paid_test(user["id"], grade, variant_index):
-        await callback.answer("Bu variant allaqachon faol!", show_alert=True)
-        return
-
-    success = spend_vab(user["id"], VAB_FOR_TEST_PURCHASE)
-    if success:
-        grant_paid_test(user["id"], grade, variant_index)
-        await callback.message.answer(
-            f"✅ {grade} — Variant {variant_index+1} aktivlashtirildi!\n"
-            f"💰 -{VAB_FOR_TEST_PURCHASE} VAB sarflandi\n\n"
-            f"💎 Testni hozir yuklashingiz mumkin!",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="💎 Boshlash",
-                                      callback_data=f"start_paid_{grade}_{variant_index}")]
-            ])
-        )
-    else:
-        await callback.answer("Amalda xatolik!", show_alert=True)
-    await callback.answer()
-
-# ═══════════════════════════════════════════════
-# 16. TEST BOSHLASH CALLBACK-LAR
-# ═══════════════════════════════════════════════
-@dp.callback_query(F.data == "start_free")
-async def start_free_test(callback: types.CallbackQuery, state: FSMContext):
-    user = get_user_by_telegram_id(callback.from_user.id)
-    if not user:
-        await callback.answer("Foydalanuvchi topilmadi!", show_alert=True)
-        return
-
-    if not await is_subscribed(callback.from_user.id):
-        await callback.message.answer(
-            "📢 Testni boshlash uchun kanalga a'zo bo'lishingiz kerak!\n\n",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📣 Kanalga a'zo bo'lish", url=CHANNEL_LINK)],
-                [InlineKeyboardButton(text="✅ Obuna bo'ldim", callback_data="start_free")]
-            ])
-        )
-        await callback.answer()
-        return
-
-    grade  = user["grade"]
-    q_list = TESTS.get(grade, [])
-    if not q_list:
-        await callback.message.answer(f"{grade} uchun bepul ulamolar yo'q.")
-        await callback.answer()
-        return
-
-    await _start_test_session(callback, state, user, q_list, "free")
-
-@dp.callback_query(F.data.startswith("start_paid_"))
-async def start_paid_test(callback: types.CallbackQuery, state: FSMContext):
-    parts = callback.data.split("_")
-    grade         = parts[2]
-    variant_index = int(parts[3])
-
-    user = get_user_by_telegram_id(callback.from_user.id)
-    if not user:
-        await callback.answer("Foydalanuvchi topilmadi!", show_alert=True)
-        return
-
-    if not has_paid_test(user["id"], grade, variant_index):
-        await callback.answer("Ushbu pullik test aktiv qilinmagan!", show_alert=True)
-        return
-
-    all_variants = PAID_TESTS.get(grade, [])
-    if not all_variants:
-        await callback.message.answer(f"{grade} savollari topilmadi.")
-        await callback.answer()
-        return
-
-    VARIANT_SIZE = 3
-    start  = variant_index * VARIANT_SIZE
-    end    = start + VARIANT_SIZE
-    q_list = all_variants[start:end] if start < len(all_variants) else all_variants
-
-    await _start_test_session(callback, state, user, q_list, "paid", grade=grade)
-
-async def _start_test_session(callback, state, user, q_list, test_type, grade=None):
-    if not grade:
-        grade = user["grade"]
-    tag = "💎 Pullik" if test_type == "paid" else "🆓 Bepul"
-
-    await state.set_state(TestProcess.answering)
-    await state.update_data(
-        grade=grade, questions=q_list, current=0, score=0, streak=0,
-        start_ts=time.time(), db_user_id=user["id"], user_name=user["full_name"],
-        last_info_msg_id=None, last_q_msg_id=None, test_type=test_type,
-    )
-    await callback.message.answer(
-        f"🚀 {grade} — {tag} sinov boshlandi!\n"
-        f"📝 Savollar: {len(q_list)}\n"
-        f"⏱ Vaqt: 45 daqiqa\n\nOmad! 🍀 @IlmNuri_Markazi"
-    )
-    await callback.answer()
-    asyncio.create_task(timeout_watcher(callback.from_user.id, state))
-    await send_question(callback.from_user.id, state)
 
 @dp.callback_query(F.data == "main_menu")
-async def back_to_main_menu(callback: types.CallbackQuery):
-    await callback.message.answer("Asosiy menyu:", reply_markup=main_menu_keyboard())
+async def callback_main_menu(callback: types.CallbackQuery):
+    await callback.message.answer("🏠 Asosiy menyu:", reply_markup=main_menu_keyboard())
     await callback.answer()
 
 # ═══════════════════════════════════════════════
-# 17. JAVOB TEKSHIRISH
+# 11. MAIN ISHGA TUSHIRISH
 # ═══════════════════════════════════════════════
-@dp.callback_query(F.data.startswith("ans_"), TestProcess.answering)
-async def check_answer(callback: types.CallbackQuery, state: FSMContext):
-    chosen = callback.data.split("_")[1]
-    data   = await state.get_data()
-    index  = data["current"]
-    q      = data["questions"][index]
-    score  = data.get("score", 0)
-    streak = data.get("streak", 0)
-
-    if chosen == q["answer"]:
-        streak += 1
-        score  += 1
-        toast   = "✅ To'g'ri!" + (" 🔥" if streak >= 2 else "")
-    else:
-        streak = 0
-        cl     = q["answer"]
-        toast  = f"❌ Noto'g'ri! To'g'ri: {cl}) {q['options'][cl]}"
-
-    await state.update_data(score=score, streak=streak, current=index + 1)
-    try:
-        await callback.answer(toast, show_alert=False)
-    except Exception:
-        pass
-    await send_question(callback.from_user.id, state)
-
-# ═══════════════════════════════════════════════
-# 18. ADMIN PANEL & STATISTIKA (O'zgarmagan qismlar)
-# ═══════════════════════════════════════════════
-@dp.message(Command("refresh"))
-async def refresh_cache(message: types.Message):
-    if not is_admin(message.from_user.id): return
-    old = get_users_count()
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    print("🚀 Bot ishga tushmoqda...")
     load_users_to_cache()
     load_inlim_and_orders_to_cache()
-    new = get_users_count()
-    await message.answer(f"✅ Baza yangilandi!\nEski cache: {old} → Yangi cache: {new} ta")
-
-@dp.message(Command("admin"))
-async def admin_panel(message: types.Message):
-    if not is_admin(message.from_user.id): return
-    await message.answer(
-        "🛠 Admin panel:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Xabar yuborish",       callback_data="send_ad")],
-            [InlineKeyboardButton(text="📊 Statistika",            callback_data="admin_stats")],
-            [InlineKeyboardButton(text="💳 Kutilayotgan to'lovlar", callback_data="pending_orders")],
-            [InlineKeyboardButton(text="🏆 INLIM sozlamalari",    callback_data="inlim_admin")],
-        ])
-    )
-
-# ... [Kodingizdagi boshqa barcha admin komandalar: inlim_admin, send_ad, confirm, reject va h.k. aynan o'zgarishsiz qolsin]
-
-# ═══════════════════════════════════════════════
-# 19. MAIN — WEBHOOK (Render ulanishi)
-# ═══════════════════════════════════════════════
-from aiohttp import web
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler
-
-RENDER_HOSTNAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "ilm-kelajak-bot.onrender.com")
-if not RENDER_HOSTNAME.startswith("https://"):
-    RENDER_HOSTNAME = f"https://{RENDER_HOSTNAME}"
-WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
-WEBHOOK_URL = f"{RENDER_HOSTNAME}{WEBHOOK_PATH}"
-PORT = int(os.environ.get("PORT", 10000))
-
-async def keep_alive_ping():
-    """Render bepul instansi o'chib qolishi oldini oladi (Health Pinger)"""
-    await asyncio.sleep(60)
-    while True:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{RENDER_HOSTNAME}/health", timeout=aiohttp.ClientTimeout(total=10)):
-                    pass
-        except Exception:
-            pass
-        await asyncio.sleep(14 * 60)
-
-async def on_startup(app: web.Application) -> None:
-    logging.info(f"Webhook o'rnatilmoqda: {WEBHOOK_URL}")
-    await bot.delete_webhook()
-    result = await bot.set_webhook(url=WEBHOOK_URL)
-    if result:
-        logging.info("✅ Webhook muvaffaqiyatli o'rnatildi!")
-    else:
-        logging.error("❌ Webhook ulanmadi!")
-    asyncio.create_task(keep_alive_ping())
-
-async def on_shutdown(app: web.Application) -> None:
-    logging.info("Bot o'chmoqda...")
-    await bot.delete_webhook()
-    await bot.session.close()
-
-async def health_check(request):
-    return web.Response(text="OK", status=200)
-
-def create_app():
-    app = web.Application()
-    app.on_startup.append(on_startup)
-    app.on_shutdown.append(on_shutdown)
-    app.router.add_get("/", health_check)
-    app.router.add_get("/health", health_check)
-    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
-    return app
+    
+    # Eskidan qolib ketgan yangilanishlarni o'chirish
+    await bot.delete_webhook(drop_pending_updates=True)
+    
+    # Pollingni boshlash
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    app = create_app()
-    web.run_app(app, host="0.0.0.0", port=PORT)
+    asyncio.run(main())
