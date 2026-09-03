@@ -5,8 +5,14 @@ import json
 import datetime
 
 import gspread
+
+from aiogram.client.session.aiohttp import AiohttpSession
 from google.oauth2.service_account import Credentials
 
+from datetime import datetime, timezone, timedelta
+
+# O'zbekiston vaqti (UTC+5)
+UZB_TIMEZONE = timezone(timedelta(hours=5))
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -40,7 +46,10 @@ FAN_LIST = ["Matematika", "Ona tili", "Ingliz tili", "Fizika", "Kimyo", "Biologi
 SINF_LIST = [f"{i}-sinf" for i in range(1, 12)]
 
 # Bot va Dispatcher obyektlari
-bot = Bot(token=BOT_TOKEN)
+# PythonAnywhere bepul tarifi uchun Proxy sozlamasi
+session = AiohttpSession(proxy="http://proxy.server:3128")
+
+bot = Bot(token=BOT_TOKEN, session=session)
 dp = Dispatcher(storage=MemoryStorage())
 
 
@@ -173,7 +182,7 @@ def is_registered(telegram_id: int) -> bool:
 def save_registration(telegram_id, full_name, school, grade, subject, phone):
     ROW_COUNTER[0] += 1
     reg_id = ROW_COUNTER[0]
-    created_at = datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
+    created_at = datetime.now(UZB_TIMEZONE).strftime("%d.%m.%Y %H:%M")
 
     REGISTERED_USERS[telegram_id] = {
         "id": reg_id,
