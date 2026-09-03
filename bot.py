@@ -24,9 +24,8 @@ log = logging.getLogger("ilm_nuri_bot")
 # ═══════════════════════════════════════════════
 # 1. SOZLAMALAR
 # ═══════════════════════════════════════════════
-BOT_TOKEN = os.environ.get("8678044800:AAF9GGeTK1qS1dJMQayrq-J3qtKMhf39wdA", "PUT_YOUR_TOKEN_HERE")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8678044800:AAF9GGeTK1qS1dJMQayrq-J3qtKMhf39wdA")
 
-# Bir nechta admin bo'lishi mumkin, vergul bilan: "111,222,333"
 ADMIN_IDS = [
     int(x) for x in os.environ.get("ADMIN_IDS", "506343083").split(",") if x.strip()
 ]
@@ -35,19 +34,19 @@ CHANNEL_LINK = "https://t.me/ilmnuri_markazi"
 CHANNEL_USERNAME = "@ilmnuri_markazi"
 SHEETS_ID = os.environ.get("SHEETS_ID", "13DjVH9V9E9FARG-FTe230Ft4g1oBcvDhWGu15vGC3p0")
 
-# Test platformasi (test topshirish shu havola/ilova orqali amalga oshadi)
-TEST_PLATFORM_URL = os.environ.get("TEST_PLATFORM_URL", "https://https://osontalim.uz/student/rash")
+# Test platformasi havolasi (takroriy https:// to'g'rilandi)
+TEST_PLATFORM_URL = os.environ.get("TEST_PLATFORM_URL", "https://osontalim.uz/student/rash")
 
 FAN_LIST = ["Matematika", "Ona tili", "Ingliz tili", "Fizika", "Kimyo", "Biologiya", "Tarix", "Boshqa"]
 SINF_LIST = [f"{i}-sinf" for i in range(1, 12)]
 
+# ⚠️ BOT VA DISPATCHER BARCHA HANDLERLARDAN TEPADA BO'LISHI SHART
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
+
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
-
-
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
 
 
 async def is_subscribed(user_id: int) -> bool:
@@ -117,7 +116,6 @@ def get_client():
 
 
 def get_registration_sheet():
-    """Ro'yxatdan o'tganlar saqlanadigan varaq. Yo'q bo'lsa avtomatik yaratiladi."""
     try:
         client = get_client()
         if not client:
@@ -134,8 +132,7 @@ def get_registration_sheet():
         return None
 
 
-# Telegram_ID lar bo'yicha tezkor keshlash (bot qayta ishga tushganda Sheets'dan tiklanadi)
-REGISTERED_USERS = {}  # telegram_id -> row dict
+REGISTERED_USERS = {}
 ROW_COUNTER = [0]
 
 
@@ -304,7 +301,7 @@ def confirm_keyboard(yes_cb: str, no_cb: str):
 
 
 # ═══════════════════════════════════════════════
-# 5. /START
+# 5. /START VA ADMIN
 # ═══════════════════════════════════════════════
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -344,7 +341,7 @@ async def cmd_admin(message: types.Message, state: FSMContext):
 
 
 # ═══════════════════════════════════════════════
-# 6. RO'YXATDAN O'TISH (barcha maydonlar majburiy)
+# 6. RO'YXATDAN O'TISH
 # ═══════════════════════════════════════════════
 @dp.message(F.text == "📝 Ro'yxatdan o'tish")
 async def start_registration(message: types.Message, state: FSMContext):
@@ -448,7 +445,6 @@ async def reg_phone(message: types.Message, state: FSMContext):
     )
     await state.clear()
 
-    # Adminlarga yangi ro'yxatdan o'tgan haqida xabar
     for admin_id in ADMIN_IDS:
         try:
             await bot.send_message(
@@ -462,7 +458,7 @@ async def reg_phone(message: types.Message, state: FSMContext):
 
 
 # ═══════════════════════════════════════════════
-# 7. TEST TOPSHIRISH (platformaga yo'naltirish)
+# 7. TEST TOPSHIRISH VA PROFIL
 # ═══════════════════════════════════════════════
 @dp.message(F.text == "🧪 Test topshirish")
 async def open_test_platform(message: types.Message):
@@ -538,7 +534,7 @@ async def show_profile(message: types.Message):
 
 
 # ═══════════════════════════════════════════════
-# 8. ADMIN PANEL — asosiy menyu
+# 8. ADMIN PANEL FUNKSIYALARI
 # ═══════════════════════════════════════════════
 @dp.callback_query(F.data == "admin_stats")
 async def admin_stats(callback: types.CallbackQuery):
@@ -548,7 +544,6 @@ async def admin_stats(callback: types.CallbackQuery):
     await callback.answer(f"👥 Jami ro'yxatdan o'tganlar: {get_registered_count()}", show_alert=True)
 
 
-# ── 8.1 Testni boshlash e'loni ─────────────────────────────
 @dp.callback_query(F.data == "admin_start_test")
 async def admin_start_test(callback: types.CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id):
@@ -621,7 +616,6 @@ async def admin_test_start_cancel(callback: types.CallbackQuery, state: FSMConte
     await callback.message.edit_reply_markup(reply_markup=None)
 
 
-# ── 8.2 Barchaga xabar yuborish ────────────────────────────
 @dp.callback_query(F.data == "admin_broadcast")
 async def admin_broadcast_start(callback: types.CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id):
@@ -667,7 +661,6 @@ async def admin_broadcast_cancel(callback: types.CallbackQuery, state: FSMContex
 
 
 async def broadcast_message(text: str, with_platform_button: bool = False, link: str | None = None):
-    """Ro'yxatdan o'tgan barcha foydalanuvchilarga xabar yuboradi. (sent, failed) qaytaradi."""
     kb = None
     if with_platform_button:
         kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -681,7 +674,7 @@ async def broadcast_message(text: str, with_platform_button: bool = False, link:
             sent += 1
         except Exception:
             failed += 1
-        await asyncio.sleep(0.05)  # Telegram limitidan saqlanish uchun
+        await asyncio.sleep(0.05)
     return sent, failed
 
 
