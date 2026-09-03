@@ -34,13 +34,12 @@ CHANNEL_LINK = "https://t.me/ilmnuri_markazi"
 CHANNEL_USERNAME = "@ilmnuri_markazi"
 SHEETS_ID = os.environ.get("SHEETS_ID", "13DjVH9V9E9FARG-FTe230Ft4g1oBcvDhWGu15vGC3p0")
 
-# Test platformasi havolasi (takroriy https:// to'g'rilandi)
 TEST_PLATFORM_URL = os.environ.get("TEST_PLATFORM_URL", "https://osontalim.uz/student/rash")
 
 FAN_LIST = ["Matematika", "Ona tili", "Ingliz tili", "Fizika", "Kimyo", "Biologiya", "Tarix", "Boshqa"]
 SINF_LIST = [f"{i}-sinf" for i in range(1, 12)]
 
-# ⚠️ BOT VA DISPATCHER BARCHA HANDLERLARDAN TEPADA BO'LISHI SHART
+# Bot va Dispatcher obyektlari
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
@@ -50,7 +49,6 @@ def is_admin(user_id: int) -> bool:
 
 
 async def is_subscribed(user_id: int) -> bool:
-    """Foydalanuvchi kanalga a'zo yoki yo'qligini tekshiradi."""
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
         return member.status not in ("left", "kicked")
