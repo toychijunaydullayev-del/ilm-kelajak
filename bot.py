@@ -464,7 +464,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
     await message.answer(
         "🌟 Assalomu alaykum!\n\n"
-        "🏆 Ilm Nuri: Kelajak Olimpiadasi botiga xush kelibsiz!\n\n"
+        "🏆 Ilm Nuri:2 ta Umra yo'llanmasi va 277 MILLIONdan ortiq grant tanloviga xush kelibsiz!\n\n"
         "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.\n"
         "Ro'yxatdan o'tish 1 daqiqa davom etadi!\n\n"
         "Quyidagi tugmani bosing 👇",
