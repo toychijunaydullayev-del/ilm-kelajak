@@ -1,5 +1,6 @@
 aiogram==3.7.0
-gspread
-google-auth
-aiohttp
-flask
+gspread==6.1.2
+google-auth==2.32.0
+aiohttp==3.9.5
+flask==3.0.3
+gunicorn==22.0.0
