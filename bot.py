@@ -42,7 +42,7 @@ class VideoStates(StatesGroup):
 # ═══════════════════════════════════════════════
 # VIDEO FILE_ID LAR (Telegram'dan oling)
 # ═══════════════════════════════════════════════
-VIDEO_GRANT = "BAACAgIAAxkBAA..."  # Grant va Umra haqida
+VIDEO_GRANT = "BAACAgIAAxkBAAITtmqc5nuRnwPjLBcJ257TkHVCnx9oAAKApQAC3mfpSDEftErxXJ84PQQ"  # Grant va Umra haqida
 VIDEO_REGISTER = "BAACAgIAAxkBAA..."  # Ro'yxatdan o'tish
 VIDEO_TEST = "BAACAgIAAxkBAA..."  # Testni qanday ishlash
 
