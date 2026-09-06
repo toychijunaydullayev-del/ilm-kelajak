@@ -2,20 +2,15 @@ import asyncio
 import logging
 import os
 import json
-import datetime
 import hashlib
 import base64
+from datetime import datetime, timezone, timedelta
 
 import gspread
 from google.oauth2.service_account import Credentials
-from google.auth.exceptions import DefaultCredentialsError
 
-from datetime import datetime, timezone, timedelta
-
-# O'zbekiston vaqti (UTC+5)
-UZB_TIMEZONE = timezone(timedelta(hours=5))
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import Command, StateFilter  # ← StateFilter qo'shildi
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -28,140 +23,18 @@ from aiogram.types import (
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("ilm_nuri_bot")
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.state import State, StatesGroup
-
-# ═══════════════════════════════════════════════
-# VIDEO HOLATLARI
-# ═══════════════════════════════════════════════
-class VideoStates(StatesGroup):
-    watching_video1 = State()  # Grant va Umra
-    watching_video2 = State()  # Ro'yxatdan o'tish
-    watching_video3 = State()  # Testni qanday ishlash
-
-# ═══════════════════════════════════════════════
-# VIDEO FILE_ID LAR (Telegram'dan oling)
-# ═══════════════════════════════════════════════
-VIDEO_GRANT = "BAACAgIAAxkBAAITtmqc5nuRnwPjLBcJ257TkHVCnx9oAAKApQAC3mfpSDEftErxXJ84PQQ"  # Grant va Umra haqida
-VIDEO_REGISTER = "BAACAgIAAxkBAA..."  # Ro'yxatdan o'tish
-VIDEO_TEST = "BAACAgIAAxkBAA..."  # Testni qanday ishlash
+# O'zbekiston vaqti (UTC+5)
+UZB_TIMEZONE = timezone(timedelta(hours=5))
 
 
-# ═══════════════════════════════════════════════
-# /START - BIRINCHI VIDEO
-# ═══════════════════════════════════════════════
-@dp.message(Command("start"))
-async def cmd_start(message: types.Message, state: FSMContext):
-    await state.clear()
-    user = REGISTERED_USERS.get(message.from_user.id)
-    
-    # Agar foydalanuvchi allaqachon ro'yxatdan o'tgan bo'lsa, videolarni ko'rsatma
-    if user:
-        await message.answer(
-            f"Salom, {user['full_name']}! ✋\n"
-            f"Siz allaqachon ro'yxatdan o'tgansiz.",
-            reply_markup=registered_main_menu_keyboard()
-        )
-        return
-    
-    # 1-video tugmasi
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="▶️ Davom etish", callback_data="video1_next")]
-    ])
-    
-    await message.answer_video(
-        video=VIDEO_GRANT,
-        caption="🎬 1/3 - Grant va Umra haqida\n\n"
-                "📌 Bu videoda siz grant va umra dasturi haqida batafsil ma'lumot olasiz.\n\n"
-                "Videoni tomosha qiling va davom etish tugmasini bosing 👇",
-        reply_markup=keyboard
-    )
-    await state.set_state(VideoStates.watching_video1)
-
-
-# ═══════════════════════════════════════════════
-# 2-VIDEO (Ro'yxatdan o'tish)
-# ═══════════════════════════════════════════════
-@dp.callback_query(F.data == "video1_next")
-async def video1_next(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await callback.message.delete()
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="▶️ Davom etish", callback_data="video2_next")]
-    ])
-    
-    await callback.message.answer_video(
-        video=VIDEO_REGISTER,
-        caption="🎬 2/3 - Botdan ro'yxatdan o'tish\n\n"
-                "📝 Bu videoda bot orqali qanday ro'yxatdan o'tish ko'rsatilgan.\n\n"
-                "Videoni tomosha qiling va davom etish tugmasini bosing 👇",
-        reply_markup=keyboard
-    )
-    await state.set_state(VideoStates.watching_video2)
-
-
-# ═══════════════════════════════════════════════
-# 3-VIDEO (Testni qanday ishlash)
-# ═══════════════════════════════════════════════
-@dp.callback_query(F.data == "video2_next")
-async def video2_next(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await callback.message.delete()
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Boshlash", callback_data="video3_finish")]
-    ])
-    
-    await callback.message.answer_video(
-        video=VIDEO_TEST,
-        caption="🎬 3/3 - Testni qanday ishlash\n\n"
-                "🧪 Bu videoda test qanday ishlashi ko'rsatilgan.\n\n"
-                "✅ Videoni tomosha qiling va 'Boshlash' tugmasini bosing!",
-        reply_markup=keyboard
-    )
-    await state.set_state(VideoStates.watching_video3)
-
-
-# ═══════════════════════════════════════════════
-# BARCHA VIDEOLAR TUGAGACH - ASOSIY MENYU
-# ═══════════════════════════════════════════════
-@dp.callback_query(F.data == "video3_finish")
-async def video3_finish(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await callback.message.delete()
-    await state.clear()
-    
-    # Asosiy menyuni ko'rsatish
-    await callback.message.answer(
-        "🌟 Assalomu alaykum!\n\n"
-        "🏆 Ilm Nuri: Kelajak Olimpiadasi botiga xush kelibsiz!\n\n"
-        "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.\n"
-        "Ro'yxatdan o'tish 1 daqiqa davom etadi!\n\n"
-        "Quyidagi tugmani bosing 👇",
-        reply_markup=main_menu_keyboard(),
-    )
-
-
-# ═══════════════════════════════════════════════
-# ORQAGA QAYTISH (ixtiyoriy)
-# ═══════════════════════════════════════════════
-@dp.callback_query(F.data == "video_skip")
-async def video_skip(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer("Videolar o'tkazib yuborildi")
-    await callback.message.delete()
-    await state.clear()
-    
-    await callback.message.answer(
-        "🌟 <b>Assalomu alaykum!</b>\n\n"
-    "<b>Ilm Nuri</b>: 2 ta Umra yo'llanmasi va <b>277 MILLION</b> dan ortiq grant tanloviga xush kelibsiz!\n\n"
-        "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.",
-        reply_markup=main_menu_keyboard(),
-    )
 # ═══════════════════════════════════════════════
 # 1. SOZLAMALAR
 # ═══════════════════════════════════════════════
-BOT_TOKEN = "8678044800:AAF9GGeTK1qS1dJMQayrq-J3qtKMhf39wdA"
+# XAVFSIZLIK ESLATMASI: Token ochiq holda kodda saqlanmasligi kerak.
+# Iloji boricha muhit o'zgaruvchisidan oling: BOT_TOKEN=... export qiling.
+# Bu token allaqachon ochiq joyda ko'rsatilgan bo'lsa, BotFather orqali
+# uni albatta bekor qilib (revoke), yangisini oling.
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8678044800:AAF9GGeTK1qS1dJMQayrq-J3qtKMhf39wdA")
 ADMIN_IDS = [506343083]
 
 CHANNEL_LINK = "https://t.me/ilmnuri_markazi"
@@ -169,12 +42,60 @@ CHANNEL_USERNAME = "@ilmnuri_markazi"
 SHEETS_ID = "13DjVH9V9E9FARG-FTe230Ft4g1oBcvDhWGu15vGC3p0"
 PLATFORM_BASE_URL = "https://osontalim.uz/student/rash"
 
-FAN_LIST = ["Matematika", "Ona tili", "Ingliz tili", "Fizika", "Kimyo", "Biologiya", "Tarix", "Tabiiy fan", "Geografiya", "Prezident maktabi", "Ibn Sino maktabi", "Mental arifmetika", "Boshqa"]
+FAN_LIST = ["Matematika", "Ona tili", "Ingliz tili", "Fizika", "Kimyo", "Biologiya",
+            "Tarix", "Tabiiy fan", "Geografiya", "Prezident maktabi",
+            "Ibn Sino maktabi", "Mental arifmetika", "Boshqa"]
 SINF_LIST = [f"{i}-sinf" for i in range(1, 12)]
+
+# ═══════════════════════════════════════════════
+# VIDEO FILE_ID LAR
+# ═══════════════════════════════════════════════
+# DIQQAT: VIDEO_REGISTER va VIDEO_TEST hali haqiqiy file_id emas
+# ("BAACAgIAAxkBAA..." — bu to'liq emas). Shu holatda qolsa,
+# Telegram API xato qaytaradi. Pastda shu holat uchun xavfsiz
+# yuborish funksiyasi (send_video_safe) qo'shilgan — u xato bo'lsa
+# faqat matn yuboradi, bot yiqilib qolmaydi. Lekin ishlashi uchun
+# haqiqiy file_id larni albatta joylashtiring.
+VIDEO_GRANT = "BAACAgIAAxkBAAITtmqc5nuRnwPjLBcJ257TkHVCnx9oAAKApQAC3mfpSDEftErxXJ84PQQ"
+VIDEO_REGISTER = "BAACAgIAAxkBAA..."  # TODO: haqiqiy file_id qo'ying
+VIDEO_TEST = "BAACAgIAAxkBAA..."      # TODO: haqiqiy file_id qo'ying
 
 
 # ═══════════════════════════════════════════════
-# 2. TOKEN YARATISH
+# 2. BOT VA DISPATCHER (handlerlardan OLDIN yaratiladi!)
+# ═══════════════════════════════════════════════
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
+
+
+# ═══════════════════════════════════════════════
+# 3. HOLATLAR (FSM STATES)
+# ═══════════════════════════════════════════════
+class VideoStates(StatesGroup):
+    watching_video1 = State()
+    watching_video2 = State()
+    watching_video3 = State()
+
+
+class Registration(StatesGroup):
+    full_name = State()
+    school = State()
+    grade = State()
+    subject = State()
+    phone = State()
+
+
+class SubjectChange(StatesGroup):
+    choosing = State()
+
+
+class AdminBroadcast(StatesGroup):
+    waiting_text = State()
+    confirm = State()
+
+
+# ═══════════════════════════════════════════════
+# 4. TOKEN YARATISH
 # ═══════════════════════════════════════════════
 def generate_user_token(telegram_id: int, full_name: str) -> str:
     """Foydalanuvchi uchun unikal token yaratish"""
@@ -183,13 +104,6 @@ def generate_user_token(telegram_id: int, full_name: str) -> str:
         hashlib.sha256(data.encode()).digest()
     ).decode()[:16]
     return token
-
-
-# ═══════════════════════════════════════════════
-# 3. BOT VA DISPATCHER
-# ═══════════════════════════════════════════════
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
 
 
 def is_admin(user_id: int) -> bool:
@@ -205,6 +119,19 @@ async def is_subscribed(user_id: int) -> bool:
         return False
 
 
+async def send_video_safe(target: types.Message, video_id: str, caption: str,
+                           keyboard: InlineKeyboardMarkup):
+    """Video yuborish, file_id noto'g'ri bo'lsa bot yiqilib qolmasligi uchun."""
+    try:
+        return await target.answer_video(video=video_id, caption=caption, reply_markup=keyboard)
+    except Exception as e:
+        log.error(f"Video yuborishda xato: {e}")
+        return await target.answer(caption, reply_markup=keyboard)
+
+
+# ═══════════════════════════════════════════════
+# 5. KLAVIATURALAR
+# ═══════════════════════════════════════════════
 def subscribe_keyboard(action: str):
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📣 Kanalga obuna bo'lish", url=CHANNEL_LINK)],
@@ -212,278 +139,6 @@ def subscribe_keyboard(action: str):
     ])
 
 
-async def send_subscription_required(message: types.Message, action: str):
-    await message.answer(
-        "📢 Botdan foydalanish uchun avval bizning rasmiy kanalimizga obuna bo'ling:\n"
-        f"{CHANNEL_LINK}\n\n"
-        "Obuna bo'lgach, pastdagi tugmani bosing 👇",
-        reply_markup=subscribe_keyboard(action),
-    )
-
-
-# ═══════════════════════════════════════════════
-# 4. GOOGLE SHEETS BILAN ISHLASH (TUZATILGAN)
-# ═══════════════════════════════════════════════
-SHEET_HEADERS = [
-    "ID", "Telegram_ID", "Ism_Familiya", "Maktab",
-    "Sinf", "Fan", "Telefon", "Token", "Ro'yxatdan_o'tgan_sana"
-]
-
-TEST_RESULT_HEADERS = [
-    "ID", "Telegram_ID", "Ism_Familiya", "Fan",
-    "To'g'ri", "Noto'g'ri", "Jami", "Foiz", "Sana", "Token"
-]
-
-_gs_client = None
-
-
-def get_credentials():
-    """Google Sheets uchun credentials olish"""
-    scopes = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/spreadsheets"
-    ]
-    
-    # 1-usul: credentials.json fayldan
-    try:
-        if os.path.exists("credentials.json"):
-            log.info("credentials.json fayli topildi")
-            return Credentials.from_service_account_file("credentials.json", scopes=scopes)
-    except Exception as e:
-        log.warning(f"credentials.json dan yuklashda xato: {e}")
-    
-    # 2-usul: GOOGLE_CREDENTIALS muhit o'zgaruvchisidan
-    creds_json = os.environ.get("GOOGLE_CREDENTIALS")
-    if creds_json:
-        try:
-            log.info("GOOGLE_CREDENTIALS muhit o'zgaruvchisi topildi")
-            info = json.loads(creds_json)
-            return Credentials.from_service_account_info(info, scopes=scopes)
-        except Exception as e:
-            log.warning(f"GOOGLE_CREDENTIALS dan yuklashda xato: {e}")
-    
-    log.error("Google Sheets credentials topilmadi!")
-    return None
-
-
-def get_client():
-    """Google Sheets client olish"""
-    global _gs_client
-    if _gs_client is None:
-        creds = get_credentials()
-        if not creds:
-            log.error("Credentials mavjud emas!")
-            return None
-        try:
-            _gs_client = gspread.authorize(creds)
-            log.info("Google Sheets ga ulanish muvaffaqiyatli!")
-        except Exception as e:
-            log.error(f"Google Sheets ulanishda xato: {e}")
-            return None
-    return _gs_client
-
-
-def get_registration_sheet():
-    """Ro'yxatdan o'tganlar jadvalini olish"""
-    try:
-        client = get_client()
-        if not client:
-            log.error("Google Sheets client topilmadi!")
-            return None
-        
-        sh = client.open_by_key(SHEETS_ID)
-        log.info(f"Sheets ochildi: {SHEETS_ID}")
-        
-        try:
-            ws = sh.worksheet("Royxatdan_otganlar")
-            log.info("Royxatdan_otganlar jadvali topildi")
-        except gspread.WorksheetNotFound:
-            log.info("Royxatdan_otganlar jadvali topilmadi, yangi yaratilmoqda...")
-            ws = sh.add_worksheet(title="Royxatdan_otganlar", rows="2000", cols="10")
-            ws.append_row(SHEET_HEADERS)
-            log.info("Yangi jadval yaratildi")
-        
-        return ws
-    except Exception as e:
-        log.error(f"Google Sheets ulanish xatosi: {e}")
-        return None
-
-
-def get_test_results_sheet():
-    """Test natijalari jadvalini olish"""
-    try:
-        client = get_client()
-        if not client:
-            return None
-        
-        sh = client.open_by_key(SHEETS_ID)
-        try:
-            ws = sh.worksheet("Test_natijalari")
-        except gspread.WorksheetNotFound:
-            ws = sh.add_worksheet(title="Test_natijalari", rows="2000", cols="10")
-            ws.append_row(TEST_RESULT_HEADERS)
-        return ws
-    except Exception as e:
-        log.error(f"Test natijalari jadvalini olishda xato: {e}")
-        return None
-
-
-REGISTERED_USERS = {}
-ROW_COUNTER = [0]
-TEST_RESULT_COUNTER = [0]
-
-
-def load_registrations_to_cache():
-    """Google Sheets dan ro'yxatni yuklash"""
-    REGISTERED_USERS.clear()
-    ws = get_registration_sheet()
-    if not ws:
-        log.warning("Ro'yxat jadvali topilmadi, kesh bo'sh")
-        return
-    
-    try:
-        rows = ws.get_all_values()
-        log.info(f"Jadvaldan {len(rows)} ta qator olindi")
-        
-        max_id = 0
-        for row in rows[1:]:  # Headerdan keyin
-            if not row or not row[0]:
-                continue
-            try:
-                reg_id = int(row[0])
-            except ValueError:
-                continue
-            
-            max_id = max(max_id, reg_id)
-            
-            # Telegram ID ni int ga o'tkazish
-            try:
-                telegram_id = int(row[1])
-            except (ValueError, IndexError):
-                continue
-            
-            REGISTERED_USERS[telegram_id] = {
-                "id": reg_id,
-                "telegram_id": telegram_id,
-                "full_name": row[2] if len(row) > 2 else "",
-                "school": row[3] if len(row) > 3 else "",
-                "grade": row[4] if len(row) > 4 else "",
-                "subject": row[5] if len(row) > 5 else "",
-                "phone": row[6] if len(row) > 6 else "",
-                "token": row[7] if len(row) > 7 else "",
-                "created_at": row[8] if len(row) > 8 else "",
-            }
-        
-        ROW_COUNTER[0] = max_id
-        log.info(f"Ro'yxat yuklandi: {len(REGISTERED_USERS)} ta foydalanuvchi")
-        
-    except Exception as e:
-        log.error(f"Ro'yxatni yuklashda xato: {e}")
-
-
-def is_registered(telegram_id: int) -> bool:
-    return telegram_id in REGISTERED_USERS
-
-
-def save_registration(telegram_id, full_name, school, grade, subject, phone):
-    """Foydalanuvchini Google Sheets ga saqlash"""
-    ROW_COUNTER[0] += 1
-    reg_id = ROW_COUNTER[0]
-    created_at = datetime.now(UZB_TIMEZONE).strftime("%d.%m.%Y %H:%M")
-    
-    # Unikal token yaratish
-    token = generate_user_token(telegram_id, full_name)
-
-    # Keshlash
-    REGISTERED_USERS[telegram_id] = {
-        "id": reg_id,
-        "telegram_id": telegram_id,
-        "full_name": full_name,
-        "school": school,
-        "grade": grade,
-        "subject": subject,
-        "phone": phone,
-        "token": token,
-        "created_at": created_at,
-    }
-
-    # Google Sheets ga yozish
-    ws = get_registration_sheet()
-    if ws:
-        try:
-            row_data = [reg_id, telegram_id, full_name, school, grade, subject, phone, token, created_at]
-            ws.append_row(row_data)
-            log.info(f"Foydalanuvchi saqlandi: {full_name} (ID: {reg_id})")
-            return reg_id
-        except Exception as e:
-            log.error(f"Google Sheets'ga yozishda xato: {e}")
-            # Xatolik haqida adminlarga xabar yuborish
-            asyncio.create_task(notify_admin_error(f"Google Sheets ga yozish xatosi: {e}"))
-    else:
-        log.error("Google Sheets jadvali topilmadi!")
-    
-    return reg_id
-
-
-def save_test_result(telegram_id, full_name, subject, correct, wrong, total, percentage, token):
-    """Test natijasini Google Sheets ga saqlash"""
-    TEST_RESULT_COUNTER[0] += 1
-    result_id = TEST_RESULT_COUNTER[0]
-    created_at = datetime.now(UZB_TIMEZONE).strftime("%d.%m.%Y %H:%M")
-
-    ws = get_test_results_sheet()
-    if ws:
-        try:
-            ws.append_row([result_id, telegram_id, full_name, subject, correct, wrong, total, percentage, created_at, token])
-            log.info(f"Test natijasi saqlandi: {full_name} - {correct}/{total}")
-        except Exception as e:
-            log.error(f"Test natijasini yozishda xato: {e}")
-    else:
-        log.error("Test natijalari jadvali topilmadi!")
-
-
-async def notify_admin_error(error_msg: str):
-    """Adminlarga xatolik haqida xabar yuborish"""
-    for admin_id in ADMIN_IDS:
-        try:
-            await bot.send_message(
-                admin_id,
-                f"⚠️ Google Sheets xatosi:\n\n{error_msg}\n\n"
-                f"📌 credentials.json fayli borligini tekshiring.\n"
-                f"📌 Sheets ID to'g'riligini tekshiring."
-            )
-        except Exception:
-            pass
-
-
-def get_all_registered_telegram_ids():
-    return list(REGISTERED_USERS.keys())
-
-
-def get_registered_count():
-    return len(REGISTERED_USERS)
-
-
-# ═══════════════════════════════════════════════
-# 5. HOLATLAR (FSM STATES)
-# ═══════════════════════════════════════════════
-class Registration(StatesGroup):
-    full_name = State()
-    school = State()
-    grade = State()
-    subject = State()
-    phone = State()
-
-
-class AdminBroadcast(StatesGroup):
-    waiting_text = State()
-    confirm = State()
-
-
-# ═══════════════════════════════════════════════
-# 6. KLAVIATURALAR
-# ═══════════════════════════════════════════════
 def main_menu_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -557,24 +212,374 @@ def confirm_keyboard(yes_cb: str, no_cb: str):
 
 
 def get_test_platform_link(user):
-    """Foydalanuvchi uchun platforma linkini yaratish"""
     token = user.get("token", "")
     telegram_id = user.get("telegram_id", "")
     subject = user.get("subject", "")
     grade = user.get("grade", "")
-    
-    link = (
+    return (
         f"{PLATFORM_BASE_URL}"
         f"?token={token}"
         f"&user_id={telegram_id}"
         f"&subject={subject}"
         f"&grade={grade}"
     )
-    return link
+
+
+async def send_subscription_required(message: types.Message, action: str):
+    await message.answer(
+        "📢 Botdan foydalanish uchun avval bizning rasmiy kanalimizga obuna bo'ling:\n"
+        f"{CHANNEL_LINK}\n\n"
+        "Obuna bo'lgach, pastdagi tugmani bosing 👇",
+        reply_markup=subscribe_keyboard(action),
+    )
 
 
 # ═══════════════════════════════════════════════
-# 7. /START VA ADMIN
+# 6. GOOGLE SHEETS BILAN ISHLASH
+# ═══════════════════════════════════════════════
+SHEET_HEADERS = [
+    "ID", "Telegram_ID", "Ism_Familiya", "Maktab",
+    "Sinf", "Fan", "Telefon", "Token", "Ro'yxatdan_o'tgan_sana"
+]
+
+TEST_RESULT_HEADERS = [
+    "ID", "Telegram_ID", "Ism_Familiya", "Fan",
+    "To'g'ri", "Noto'g'ri", "Jami", "Foiz", "Sana", "Token"
+]
+
+_gs_client = None
+
+
+def get_credentials():
+    scopes = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/spreadsheets"
+    ]
+    try:
+        if os.path.exists("credentials.json"):
+            log.info("credentials.json fayli topildi")
+            return Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    except Exception as e:
+        log.warning(f"credentials.json dan yuklashda xato: {e}")
+
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+    if creds_json:
+        try:
+            log.info("GOOGLE_CREDENTIALS muhit o'zgaruvchisi topildi")
+            info = json.loads(creds_json)
+            return Credentials.from_service_account_info(info, scopes=scopes)
+        except Exception as e:
+            log.warning(f"GOOGLE_CREDENTIALS dan yuklashda xato: {e}")
+
+    log.error("Google Sheets credentials topilmadi!")
+    return None
+
+
+def get_client():
+    global _gs_client
+    if _gs_client is None:
+        creds = get_credentials()
+        if not creds:
+            log.error("Credentials mavjud emas!")
+            return None
+        try:
+            _gs_client = gspread.authorize(creds)
+            log.info("Google Sheets ga ulanish muvaffaqiyatli!")
+        except Exception as e:
+            log.error(f"Google Sheets ulanishda xato: {e}")
+            return None
+    return _gs_client
+
+
+def get_registration_sheet():
+    try:
+        client = get_client()
+        if not client:
+            log.error("Google Sheets client topilmadi!")
+            return None
+
+        sh = client.open_by_key(SHEETS_ID)
+        try:
+            ws = sh.worksheet("Royxatdan_otganlar")
+        except gspread.WorksheetNotFound:
+            log.info("Royxatdan_otganlar jadvali topilmadi, yangi yaratilmoqda...")
+            ws = sh.add_worksheet(title="Royxatdan_otganlar", rows="2000", cols="10")
+            ws.append_row(SHEET_HEADERS)
+        return ws
+    except Exception as e:
+        log.error(f"Google Sheets ulanish xatosi: {e}")
+        return None
+
+
+def get_test_results_sheet():
+    try:
+        client = get_client()
+        if not client:
+            return None
+
+        sh = client.open_by_key(SHEETS_ID)
+        try:
+            ws = sh.worksheet("Test_natijalari")
+        except gspread.WorksheetNotFound:
+            ws = sh.add_worksheet(title="Test_natijalari", rows="2000", cols="10")
+            ws.append_row(TEST_RESULT_HEADERS)
+        return ws
+    except Exception as e:
+        log.error(f"Test natijalari jadvalini olishda xato: {e}")
+        return None
+
+
+REGISTERED_USERS = {}
+ROW_COUNTER = [0]
+TEST_RESULT_COUNTER = [0]
+
+
+def load_registrations_to_cache():
+    REGISTERED_USERS.clear()
+    ws = get_registration_sheet()
+    if not ws:
+        log.warning("Ro'yxat jadvali topilmadi, kesh bo'sh")
+        return
+
+    try:
+        rows = ws.get_all_values()
+        log.info(f"Jadvaldan {len(rows)} ta qator olindi")
+
+        max_id = 0
+        for row in rows[1:]:
+            if not row or not row[0]:
+                continue
+            try:
+                reg_id = int(row[0])
+            except ValueError:
+                continue
+
+            max_id = max(max_id, reg_id)
+
+            try:
+                telegram_id = int(row[1])
+            except (ValueError, IndexError):
+                continue
+
+            REGISTERED_USERS[telegram_id] = {
+                "id": reg_id,
+                "telegram_id": telegram_id,
+                "full_name": row[2] if len(row) > 2 else "",
+                "school": row[3] if len(row) > 3 else "",
+                "grade": row[4] if len(row) > 4 else "",
+                "subject": row[5] if len(row) > 5 else "",
+                "phone": row[6] if len(row) > 6 else "",
+                "token": row[7] if len(row) > 7 else "",
+                "created_at": row[8] if len(row) > 8 else "",
+            }
+
+        ROW_COUNTER[0] = max_id
+        log.info(f"Ro'yxat yuklandi: {len(REGISTERED_USERS)} ta foydalanuvchi")
+
+    except Exception as e:
+        log.error(f"Ro'yxatni yuklashda xato: {e}")
+
+
+def load_test_result_counter():
+    """Qayta ishga tushganda ID hisoblagichni jadvaldagi oxirgi qiymatdan tiklaydi."""
+    ws = get_test_results_sheet()
+    if not ws:
+        return
+    try:
+        rows = ws.get_all_values()
+        max_id = 0
+        for row in rows[1:]:
+            if row and row[0]:
+                try:
+                    max_id = max(max_id, int(row[0]))
+                except ValueError:
+                    continue
+        TEST_RESULT_COUNTER[0] = max_id
+    except Exception as e:
+        log.error(f"Test natija hisoblagichini yuklashda xato: {e}")
+
+
+def is_registered(telegram_id: int) -> bool:
+    return telegram_id in REGISTERED_USERS
+
+
+def save_registration(telegram_id, full_name, school, grade, subject, phone):
+    ROW_COUNTER[0] += 1
+    reg_id = ROW_COUNTER[0]
+    created_at = datetime.now(UZB_TIMEZONE).strftime("%d.%m.%Y %H:%M")
+    token = generate_user_token(telegram_id, full_name)
+
+    REGISTERED_USERS[telegram_id] = {
+        "id": reg_id,
+        "telegram_id": telegram_id,
+        "full_name": full_name,
+        "school": school,
+        "grade": grade,
+        "subject": subject,
+        "phone": phone,
+        "token": token,
+        "created_at": created_at,
+    }
+
+    ws = get_registration_sheet()
+    if ws:
+        try:
+            row_data = [reg_id, telegram_id, full_name, school, grade, subject, phone, token, created_at]
+            ws.append_row(row_data)
+            log.info(f"Foydalanuvchi saqlandi: {full_name} (ID: {reg_id})")
+            return reg_id, True
+        except Exception as e:
+            log.error(f"Google Sheets'ga yozishda xato: {e}")
+            asyncio.create_task(notify_admin_error(f"Google Sheets ga yozish xatosi: {e}"))
+            return reg_id, False
+    else:
+        log.error("Google Sheets jadvali topilmadi!")
+        return reg_id, False
+
+
+def save_test_result(telegram_id, full_name, subject, correct, wrong, total, percentage, token):
+    TEST_RESULT_COUNTER[0] += 1
+    result_id = TEST_RESULT_COUNTER[0]
+    created_at = datetime.now(UZB_TIMEZONE).strftime("%d.%m.%Y %H:%M")
+
+    ws = get_test_results_sheet()
+    if ws:
+        try:
+            ws.append_row([result_id, telegram_id, full_name, subject, correct, wrong,
+                           total, percentage, created_at, token])
+            log.info(f"Test natijasi saqlandi: {full_name} - {correct}/{total}")
+        except Exception as e:
+            log.error(f"Test natijasini yozishda xato: {e}")
+    else:
+        log.error("Test natijalari jadvali topilmadi!")
+
+
+async def notify_admin_error(error_msg: str):
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(
+                admin_id,
+                f"⚠️ Google Sheets xatosi:\n\n{error_msg}\n\n"
+                f"📌 credentials.json fayli borligini tekshiring.\n"
+                f"📌 Sheets ID to'g'riligini tekshiring."
+            )
+        except Exception:
+            pass
+
+
+def get_all_registered_telegram_ids():
+    return list(REGISTERED_USERS.keys())
+
+
+def get_registered_count():
+    return len(REGISTERED_USERS)
+
+
+# ═══════════════════════════════════════════════
+# 7. /START — VIDEOLAR BILAN
+# ═══════════════════════════════════════════════
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
+    user = REGISTERED_USERS.get(message.from_user.id)
+
+    if user:
+        await message.answer(
+            f"Salom, {user['full_name']}! ✋\n"
+            f"Siz allaqachon ro'yxatdan o'tgansiz.",
+            reply_markup=registered_main_menu_keyboard()
+        )
+        return
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="▶️ Davom etish", callback_data="video1_next")]
+    ])
+
+    await send_video_safe(
+        message,
+        VIDEO_GRANT,
+        "🎬 1/3 - Grant va Umra haqida\n\n"
+        "📌 Bu videoda siz grant va umra dasturi haqida batafsil ma'lumot olasiz.\n\n"
+        "Videoni tomosha qiling va davom etish tugmasini bosing 👇",
+        keyboard,
+    )
+    await state.set_state(VideoStates.watching_video1)
+
+
+@dp.callback_query(F.data == "video1_next")
+async def video1_next(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.delete()
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="▶️ Davom etish", callback_data="video2_next")]
+    ])
+
+    await send_video_safe(
+        callback.message,
+        VIDEO_REGISTER,
+        "🎬 2/3 - Botdan ro'yxatdan o'tish\n\n"
+        "📝 Bu videoda bot orqali qanday ro'yxatdan o'tish ko'rsatilgan.\n\n"
+        "Videoni tomosha qiling va davom etish tugmasini bosing 👇",
+        keyboard,
+    )
+    await state.set_state(VideoStates.watching_video2)
+
+
+@dp.callback_query(F.data == "video2_next")
+async def video2_next(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.delete()
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Boshlash", callback_data="video3_finish")]
+    ])
+
+    await send_video_safe(
+        callback.message,
+        VIDEO_TEST,
+        "🎬 3/3 - Testni qanday ishlash\n\n"
+        "🧪 Bu videoda test qanday ishlashi ko'rsatilgan.\n\n"
+        "✅ Videoni tomosha qiling va 'Boshlash' tugmasini bosing!",
+        keyboard,
+    )
+    await state.set_state(VideoStates.watching_video3)
+
+
+@dp.callback_query(F.data == "video3_finish")
+async def video3_finish(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.delete()
+    await state.clear()
+
+    await callback.message.answer(
+        "🌟 Assalomu alaykum!\n\n"
+        "🏆 Ilm Nuri: Kelajak Olimpiadasi botiga xush kelibsiz!\n\n"
+        "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.\n"
+        "Ro'yxatdan o'tish 1 daqiqa davom etadi!\n\n"
+        "Quyidagi tugmani bosing 👇",
+        reply_markup=main_menu_keyboard(),
+    )
+
+
+@dp.callback_query(F.data == "video_skip")
+async def video_skip(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer("Videolar o'tkazib yuborildi")
+    await callback.message.delete()
+    await state.clear()
+
+    await callback.message.answer(
+        "🌟 <b>Assalomu alaykum!</b>\n\n"
+        "<b>Ilm Nuri</b>: 2 ta Umra yo'llanmasi va <b>277 MILLION</b> dan ortiq "
+        "grant tanloviga xush kelibsiz!\n\n"
+        "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.",
+        reply_markup=main_menu_keyboard(),
+    )
+
+
+# ═══════════════════════════════════════════════
+# 8. ADMIN PANEL KIRISH
 # ═══════════════════════════════════════════════
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message, state: FSMContext):
@@ -590,7 +595,7 @@ async def cmd_admin(message: types.Message, state: FSMContext):
 
 
 # ═══════════════════════════════════════════════
-# 8. RO'YXATDAN O'TISH
+# 9. RO'YXATDAN O'TISH
 # ═══════════════════════════════════════════════
 @dp.message(F.text == "📝 Ro'yxatdan o'tish")
 async def start_registration(message: types.Message, state: FSMContext):
@@ -601,11 +606,11 @@ async def start_registration(message: types.Message, state: FSMContext):
             reply_markup=registered_main_menu_keyboard(),
         )
         return
-    
+
     if not await is_subscribed(message.from_user.id):
         await send_subscription_required(message, "register")
         return
-    
+
     await ask_full_name(message, state)
 
 
@@ -693,10 +698,9 @@ async def reg_phone(message: types.Message, state: FSMContext):
         return
 
     data = await state.get_data()
-    
-    # Google Sheets ga saqlash
+
     try:
-        save_registration(
+        reg_id, saved_ok = save_registration(
             telegram_id=message.from_user.id,
             full_name=data["full_name"],
             school=data["school"],
@@ -704,7 +708,7 @@ async def reg_phone(message: types.Message, state: FSMContext):
             subject=data["subject"],
             phone=phone,
         )
-        
+
         user = REGISTERED_USERS.get(message.from_user.id)
         token = user["token"] if user else ""
 
@@ -721,33 +725,36 @@ async def reg_phone(message: types.Message, state: FSMContext):
             "Pastdagi tugmani bosing 👇",
             reply_markup=registered_main_menu_keyboard(),
         )
-        
+
+        if not saved_ok:
+            log.warning(f"Foydalanuvchi {message.from_user.id} faqat keshda, jadvalga yozilmadi.")
+
+        for admin_id in ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    admin_id,
+                    f"🆕 Yangi ro'yxatdan o'tish!\n"
+                    f"👤 {data['full_name']}\n"
+                    f"🏫 {data['school']}\n"
+                    f"🎒 {data['grade']}\n"
+                    f"📘 {data['subject']}\n"
+                    f"📞 {phone}",
+                )
+            except Exception:
+                pass
+
     except Exception as e:
         log.error(f"Ro'yxatdan o'tishda xato: {e}")
         await message.answer(
             "❌ Xatolik yuz berdi! Iltimos, qayta urinib ko'ring.\n"
             f"Xato: {str(e)}"
         )
-    
-    await state.clear()
 
-    for admin_id in ADMIN_IDS:
-        try:
-            await bot.send_message(
-                admin_id,
-                f"🆕 Yangi ro'yxatdan o'tish!\n"
-                f"👤 {data['full_name']}\n"
-                f"🏫 {data['school']}\n"
-                f"🎒 {data['grade']}\n"
-                f"📘 {data['subject']}\n"
-                f"📞 {phone}",
-            )
-        except Exception:
-            pass
+    await state.clear()
 
 
 # ═══════════════════════════════════════════════
-# 9. FAN O'ZGARTIRISH
+# 10. FAN O'ZGARTIRISH
 # ═══════════════════════════════════════════════
 @dp.message(F.text == "🔄 Fan o'zgartirish")
 async def change_subject(message: types.Message, state: FSMContext):
@@ -757,32 +764,23 @@ async def change_subject(message: types.Message, state: FSMContext):
             reply_markup=main_menu_keyboard()
         )
         return
-    
+
     await message.answer(
         "📘 Qaysi fanga o'zgartirmoqchisiz?",
         reply_markup=subject_inline_keyboard()
     )
-    await state.set_state("changing_subject")
+    await state.set_state(SubjectChange.choosing)
 
 
-@dp.callback_query(F.data.startswith("subject_"))
+@dp.callback_query(SubjectChange.choosing, F.data.startswith("subject_"))
 async def change_subject_callback(callback: types.CallbackQuery, state: FSMContext):
-    # State ni tekshirish
-    current_state = await state.get_state()
-    if current_state != "changing_subject":
-        await callback.answer("❌ Bu holatda emassiz!")
-        return
-    
     subject = callback.data.split("_", 1)[1]
-    
-    # Foydalanuvchini yangilash
+
     user = REGISTERED_USERS.get(callback.from_user.id)
     if user:
-        # Google Sheets da yangilash
         ws = get_registration_sheet()
         if ws:
             try:
-                # Foydalanuvchini topish va yangilash
                 cell = ws.find(str(callback.from_user.id), in_column=2)
                 if cell:
                     ws.update_cell(cell.row, 6, subject)  # 6-column = Fan
@@ -790,7 +788,7 @@ async def change_subject_callback(callback: types.CallbackQuery, state: FSMConte
                     log.info(f"Fan o'zgartirildi: {user['full_name']} -> {subject}")
             except Exception as e:
                 log.error(f"Fanni yangilashda xato: {e}")
-    
+
     await callback.message.edit_text(f"✅ Fan muvaffaqiyatli o'zgartirildi: {subject}")
     await callback.message.answer(
         f"📘 Endi sizning faningiz: {subject}\n\n"
@@ -802,28 +800,30 @@ async def change_subject_callback(callback: types.CallbackQuery, state: FSMConte
 
 
 # ═══════════════════════════════════════════════
-# 10. TEST TOPSHIRISH
+# 11. TEST TOPSHIRISH
 # ═══════════════════════════════════════════════
-@dp.message(F.text == "🧪 Test topshirish")
-async def open_test_platform(message: types.Message):
-    if not is_registered(message.from_user.id):
-        await message.answer(
+async def send_test_platform(target: types.Message, user_id: int):
+    """
+    target — javob yuboriladigan Message obyekti (chatni bildiradi).
+    user_id — HAQIQIY foydalanuvchi Telegram ID si (target.from_user.id EMAS,
+    chunki callback orqali chaqirilganda target ba'zan botning o'z xabari bo'ladi).
+    """
+    if not is_registered(user_id):
+        await target.answer(
             "❌ Testda qatnashish uchun avval ro'yxatdan o'tishingiz kerak.\n\n"
             "📝 Ro'yxatdan o'tish tugmasini bosing.",
             reply_markup=main_menu_keyboard(),
         )
         return
-    
-    if not await is_subscribed(message.from_user.id):
-        await send_subscription_required(message, "test")
+
+    if not await is_subscribed(user_id):
+        await send_subscription_required(target, "test")
         return
-    
-    user = REGISTERED_USERS.get(message.from_user.id)
-    
-    # Platformaga link
+
+    user = REGISTERED_USERS.get(user_id)
     platform_url = get_test_platform_link(user)
-    
-    await message.answer(
+
+    await target.answer(
         f"🧪 Test topshirish\n\n"
         f"👤 {user['full_name']}\n"
         f"📚 Sinf: {user['grade']}\n"
@@ -835,6 +835,11 @@ async def open_test_platform(message: types.Message):
             [InlineKeyboardButton(text="📝 Testni boshlash", url=platform_url)],
         ]),
     )
+
+
+@dp.message(F.text == "🧪 Test topshirish")
+async def open_test_platform(message: types.Message):
+    await send_test_platform(message, message.from_user.id)
 
 
 @dp.callback_query(F.data.startswith("check_sub:"))
@@ -863,35 +868,37 @@ async def check_subscription_callback(callback: types.CallbackQuery, state: FSMC
         else:
             await ask_full_name(callback.message, state)
     elif action == "test":
-        await open_test_platform(callback.message)
+        # Bu yerda callback.from_user.id ishlatiladi, callback.message.from_user.id EMAS —
+        # aks holda foydalanuvchi o'rniga bot ID si tekshirilib qolar edi.
+        await send_test_platform(callback.message, callback.from_user.id)
 
 
 # ═══════════════════════════════════════════════
-# 11. NATIJALARIM
+# 12. NATIJALARIM
 # ═══════════════════════════════════════════════
 @dp.message(F.text == "📊 Natijalarim")
 async def show_results(message: types.Message):
     user = REGISTERED_USERS.get(message.from_user.id)
-    
+
     if not user:
         await message.answer(
             "❌ Siz hali ro'yxatdan o'tmagansiz.",
             reply_markup=main_menu_keyboard()
         )
         return
-    
+
     ws = get_test_results_sheet()
     if not ws:
         await message.answer("❌ Natijalar hali mavjud emas.")
         return
-    
+
     try:
         rows = ws.get_all_values()
         user_results = []
         for row in rows[1:]:
-            if len(row) > 1 and int(row[1]) == message.from_user.id:
+            if len(row) > 1 and row[1].isdigit() and int(row[1]) == message.from_user.id:
                 user_results.append(row)
-        
+
         if not user_results:
             await message.answer(
                 "📊 Siz hali test topshirmagansiz.\n\n"
@@ -899,33 +906,32 @@ async def show_results(message: types.Message):
                 reply_markup=registered_main_menu_keyboard()
             )
             return
-        
+
         result_text = "📊 Sizning natijalaringiz:\n\n"
         for row in user_results[-5:]:
             result_text += (
                 f"📘 {row[3]}\n"
                 f"✅ To'g'ri: {row[4]} | ❌ Noto'g'ri: {row[5]}\n"
                 f"📈 {row[7]}% | 📅 {row[8]}\n\n"
-        )
-        
-        # O'rtacha foiz
-        if len(user_results) > 0:
-            percentages = [float(row[7]) for row in user_results if len(row) > 7]
-            avg = sum(percentages) / len(percentages) if percentages else 0
+            )
+
+        percentages = [float(row[7]) for row in user_results if len(row) > 7]
+        if percentages:
+            avg = sum(percentages) / len(percentages)
             result_text += f"📊 O'rtacha natija: {round(avg, 1)}%"
-        
+
         await message.answer(
             result_text,
             reply_markup=registered_main_menu_keyboard()
         )
-        
+
     except Exception as e:
         log.error(f"Natijalarni o'qishda xato: {e}")
         await message.answer("❌ Natijalarni o'qishda xatolik yuz berdi.")
 
 
 # ═══════════════════════════════════════════════
-# 12. PROFIL
+# 13. PROFIL
 # ═══════════════════════════════════════════════
 @dp.message(F.text == "👤 Profilim")
 async def show_profile(message: types.Message):
@@ -936,7 +942,7 @@ async def show_profile(message: types.Message):
             reply_markup=main_menu_keyboard(),
         )
         return
-    
+
     await message.answer(
         f"👤 Profil\n\n"
         f"👤 {user['full_name']}\n"
@@ -951,23 +957,23 @@ async def show_profile(message: types.Message):
 
 
 # ═══════════════════════════════════════════════
-# 13. ADMIN PANEL
+# 14. ADMIN PANEL
 # ═══════════════════════════════════════════════
 @dp.callback_query(F.data == "admin_stats")
 async def admin_stats(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
         await callback.answer()
         return
-    
+
     ws = get_test_results_sheet()
     total_tests = 0
     if ws:
         try:
             rows = ws.get_all_values()
             total_tests = len(rows) - 1
-        except:
+        except Exception:
             pass
-    
+
     await callback.answer(
         f"📊 Statistika:\n\n"
         f"👥 Ro'yxatdan o'tganlar: {get_registered_count()}\n"
@@ -981,24 +987,23 @@ async def admin_test_results(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
         await callback.answer()
         return
-    
+
     ws = get_test_results_sheet()
     if not ws:
         await callback.answer("❌ Test natijalari topilmadi.")
         return
-    
+
     try:
         rows = ws.get_all_values()
         total_tests = len(rows) - 1
-        
-        if total_tests == 0:
+
+        if total_tests <= 0:
             await callback.answer("📊 Hali hech kim test topshirmagan.", show_alert=True)
             return
-        
-        # Oxirgi 10 ta natija
+
         result_text = "📈 So'nggi test natijalari:\n\n"
         count = 0
-        for row in reversed(rows[1:]):  # Eng oxirgidan boshlab
+        for row in reversed(rows[1:]):
             if len(row) > 8:
                 result_text += f"👤 {row[2]}\n"
                 result_text += f"📘 {row[3]} | ✅ {row[4]} | ❌ {row[5]}\n"
@@ -1006,13 +1011,13 @@ async def admin_test_results(callback: types.CallbackQuery):
                 count += 1
                 if count >= 10:
                     break
-        
+
         if len(result_text) > 4000:
             result_text = result_text[:4000] + "..."
-        
+
         await callback.message.answer(result_text)
         await callback.answer()
-        
+
     except Exception as e:
         log.error(f"Admin test natijalarida xato: {e}")
         await callback.answer("❌ Xatolik yuz berdi.")
@@ -1059,7 +1064,7 @@ async def admin_broadcast_confirm(callback: types.CallbackQuery, state: FSMConte
         except Exception:
             failed += 1
         await asyncio.sleep(0.05)
-    
+
     await callback.message.answer(f"✅ Xabar yuborildi.\nMuvaffaqiyatli: {sent}\nXato: {failed}")
 
 
@@ -1071,10 +1076,11 @@ async def admin_broadcast_cancel(callback: types.CallbackQuery, state: FSMContex
 
 
 # ═══════════════════════════════════════════════
-# 14. ISHGA TUSHIRISH
+# 15. ISHGA TUSHIRISH
 # ═══════════════════════════════════════════════
 async def main():
     load_registrations_to_cache()
+    load_test_result_counter()
     log.info("Bot ishga tushmoqda...")
     await dp.start_polling(bot)
 
