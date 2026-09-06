@@ -555,7 +555,7 @@ async def video3_finish(callback: types.CallbackQuery, state: FSMContext):
 
     await callback.message.answer(
         "🌟 Assalomu alaykum!\n\n"
-        "🏆 Ilm Nuri: Kelajak Olimpiadasi botiga xush kelibsiz!\n\n"
+        "🏆 <b>Ilm Nuri: Grant 277 milliondan ortiq va 2 ta Umra ziyoratiga yo'llanma</b>\n\n"
         "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.\n"
         "Ro'yxatdan o'tish 1 daqiqa davom etadi!\n\n"
         "Quyidagi tugmani bosing 👇",
