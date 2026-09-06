@@ -28,6 +28,136 @@ from aiogram.types import (
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("ilm_nuri_bot")
 
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.state import State, StatesGroup
+
+# ═══════════════════════════════════════════════
+# VIDEO HOLATLARI
+# ═══════════════════════════════════════════════
+class VideoStates(StatesGroup):
+    watching_video1 = State()  # Grant va Umra
+    watching_video2 = State()  # Ro'yxatdan o'tish
+    watching_video3 = State()  # Testni qanday ishlash
+
+# ═══════════════════════════════════════════════
+# VIDEO FILE_ID LAR (Telegram'dan oling)
+# ═══════════════════════════════════════════════
+VIDEO_GRANT = "BAACAgIAAxkBAA..."  # Grant va Umra haqida
+VIDEO_REGISTER = "BAACAgIAAxkBAA..."  # Ro'yxatdan o'tish
+VIDEO_TEST = "BAACAgIAAxkBAA..."  # Testni qanday ishlash
+
+
+# ═══════════════════════════════════════════════
+# /START - BIRINCHI VIDEO
+# ═══════════════════════════════════════════════
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
+    user = REGISTERED_USERS.get(message.from_user.id)
+    
+    # Agar foydalanuvchi allaqachon ro'yxatdan o'tgan bo'lsa, videolarni ko'rsatma
+    if user:
+        await message.answer(
+            f"Salom, {user['full_name']}! ✋\n"
+            f"Siz allaqachon ro'yxatdan o'tgansiz.",
+            reply_markup=registered_main_menu_keyboard()
+        )
+        return
+    
+    # 1-video tugmasi
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="▶️ Davom etish", callback_data="video1_next")]
+    ])
+    
+    await message.answer_video(
+        video=VIDEO_GRANT,
+        caption="🎬 1/3 - Grant va Umra haqida\n\n"
+                "📌 Bu videoda siz grant va umra dasturi haqida batafsil ma'lumot olasiz.\n\n"
+                "Videoni tomosha qiling va davom etish tugmasini bosing 👇",
+        reply_markup=keyboard
+    )
+    await state.set_state(VideoStates.watching_video1)
+
+
+# ═══════════════════════════════════════════════
+# 2-VIDEO (Ro'yxatdan o'tish)
+# ═══════════════════════════════════════════════
+@dp.callback_query(F.data == "video1_next")
+async def video1_next(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.delete()
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="▶️ Davom etish", callback_data="video2_next")]
+    ])
+    
+    await callback.message.answer_video(
+        video=VIDEO_REGISTER,
+        caption="🎬 2/3 - Botdan ro'yxatdan o'tish\n\n"
+                "📝 Bu videoda bot orqali qanday ro'yxatdan o'tish ko'rsatilgan.\n\n"
+                "Videoni tomosha qiling va davom etish tugmasini bosing 👇",
+        reply_markup=keyboard
+    )
+    await state.set_state(VideoStates.watching_video2)
+
+
+# ═══════════════════════════════════════════════
+# 3-VIDEO (Testni qanday ishlash)
+# ═══════════════════════════════════════════════
+@dp.callback_query(F.data == "video2_next")
+async def video2_next(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.delete()
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Boshlash", callback_data="video3_finish")]
+    ])
+    
+    await callback.message.answer_video(
+        video=VIDEO_TEST,
+        caption="🎬 3/3 - Testni qanday ishlash\n\n"
+                "🧪 Bu videoda test qanday ishlashi ko'rsatilgan.\n\n"
+                "✅ Videoni tomosha qiling va 'Boshlash' tugmasini bosing!",
+        reply_markup=keyboard
+    )
+    await state.set_state(VideoStates.watching_video3)
+
+
+# ═══════════════════════════════════════════════
+# BARCHA VIDEOLAR TUGAGACH - ASOSIY MENYU
+# ═══════════════════════════════════════════════
+@dp.callback_query(F.data == "video3_finish")
+async def video3_finish(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.delete()
+    await state.clear()
+    
+    # Asosiy menyuni ko'rsatish
+    await callback.message.answer(
+        "🌟 Assalomu alaykum!\n\n"
+        "🏆 Ilm Nuri: Kelajak Olimpiadasi botiga xush kelibsiz!\n\n"
+        "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.\n"
+        "Ro'yxatdan o'tish 1 daqiqa davom etadi!\n\n"
+        "Quyidagi tugmani bosing 👇",
+        reply_markup=main_menu_keyboard(),
+    )
+
+
+# ═══════════════════════════════════════════════
+# ORQAGA QAYTISH (ixtiyoriy)
+# ═══════════════════════════════════════════════
+@dp.callback_query(F.data == "video_skip")
+async def video_skip(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer("Videolar o'tkazib yuborildi")
+    await callback.message.delete()
+    await state.clear()
+    
+    await callback.message.answer(
+        "🌟 <b>Assalomu alaykum!</b>\n\n"
+    "<b>Ilm Nuri</b>: 2 ta Umra yo'llanmasi va <b>277 MILLION</b> dan ortiq grant tanloviga xush kelibsiz!",\n\n"
+        "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.",
+        reply_markup=main_menu_keyboard(),
+    )
 # ═══════════════════════════════════════════════
 # 1. SOZLAMALAR
 # ═══════════════════════════════════════════════
@@ -446,32 +576,6 @@ def get_test_platform_link(user):
 # ═══════════════════════════════════════════════
 # 7. /START VA ADMIN
 # ═══════════════════════════════════════════════
-@dp.message(Command("start"))
-async def cmd_start(message: types.Message, state: FSMContext):
-    await state.clear()
-    user = REGISTERED_USERS.get(message.from_user.id)
-
-    if user:
-        await message.answer(
-            f"👋 Salom, {user['full_name']}!\n\n"
-            f"✅ Siz allaqachon ro'yxatdan o'tgansiz.\n"
-            f"📚 Sinf: {user['grade']}\n"
-            f"📘 Fan: {user['subject']}\n\n"
-            f"🧪 Test topshirish uchun pastdagi tugmani bosing!",
-            reply_markup=registered_main_menu_keyboard(),
-        )
-        return
-
-    await message.answer(
-        "🌟 Assalomu alaykum!\n\n"
-        "🏆 Ilm Nuri: 2 ta Umra yo'llanmasi va 277 MILLIONdan ortiq grant tanloviga xush kelibsiz!\n\n"
-        "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.\n"
-        "Ro'yxatdan o'tish 1 daqiqa davom etadi!\n\n"
-        "Quyidagi tugmani bosing 👇",
-        reply_markup=main_menu_keyboard(),
-    )
-
-
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user.id):
