@@ -29,7 +29,8 @@ def home():
     return "Bot is running!", 200
 
 def run_web_server():
-    app.run(host='0.0.0.0', port=10000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("ilm_nuri_bot")
@@ -1098,3 +1099,4 @@ async def main():
 if __name__ == "__main__":
     # Web serverni alohida oqimda (thread) ishga tushirish
     threading.Thread(target=run_web_server, daemon=True).start()
+    asyncio.run(main())
