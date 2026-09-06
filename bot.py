@@ -19,6 +19,17 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardRemove,
 )
+from flask import Flask
+import threading
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!", 200
+
+def run_web_server():
+    app.run(host='0.0.0.0', port=10000)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("ilm_nuri_bot")
@@ -1084,6 +1095,6 @@ async def main():
     log.info("Bot ishga tushmoqda...")
     await dp.start_polling(bot)
 
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Web serverni alohida oqimda (thread) ishga tushirish
+    threading.Thread(target=run_web_server, daemon=True).start()
