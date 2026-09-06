@@ -154,7 +154,7 @@ async def video_skip(callback: types.CallbackQuery, state: FSMContext):
     
     await callback.message.answer(
         "🌟 <b>Assalomu alaykum!</b>\n\n"
-    "<b>Ilm Nuri</b>: 2 ta Umra yo'llanmasi va <b>277 MILLION</b> dan ortiq grant tanloviga xush kelibsiz!",\n\n"
+    "<b>Ilm Nuri</b>: 2 ta Umra yo'llanmasi va <b>277 MILLION</b> dan ortiq grant tanloviga xush kelibsiz!"\n\n"
         "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.",
         reply_markup=main_menu_keyboard(),
     )
