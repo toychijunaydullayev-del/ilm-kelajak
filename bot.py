@@ -554,27 +554,14 @@ async def video3_finish(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
 
     await callback.message.answer(
-        "🌟 Assalomu alaykum!\n\n"
-        "🏆 Ilm Nuri: Kelajak Olimpiadasi botiga xush kelibsiz!\n\n"
+        "🌟 <b>Assalomu alaykum!</b>\n\n"
+        "<b>🏆 Ilm Nuri</b>: 2 ta Umra yo'llanmasi va <b>277 MILLION</b> dan ortiq "
+        "grant tanloviga xush kelibsiz!\n\n"
         "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.\n"
         "Ro'yxatdan o'tish 1 daqiqa davom etadi!\n\n"
         "Quyidagi tugmani bosing 👇",
         reply_markup=main_menu_keyboard(),
-    )
-
-
-@dp.callback_query(F.data == "video_skip")
-async def video_skip(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer("Videolar o'tkazib yuborildi")
-    await callback.message.delete()
-    await state.clear()
-
-    await callback.message.answer(
-        "🌟 <b>Assalomu alaykum!</b>\n\n"
-        "<b>Ilm Nuri</b>: 2 ta Umra yo'llanmasi va <b>277 MILLION</b> dan ortiq "
-        "grant tanloviga xush kelibsiz!\n\n"
-        "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.",
-        reply_markup=main_menu_keyboard(),
+        parse_mode="HTML"
     )
 
 
