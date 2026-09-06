@@ -34,7 +34,7 @@ UZB_TIMEZONE = timezone(timedelta(hours=5))
 # Iloji boricha muhit o'zgaruvchisidan oling: BOT_TOKEN=... export qiling.
 # Bu token allaqachon ochiq joyda ko'rsatilgan bo'lsa, BotFather orqali
 # uni albatta bekor qilib (revoke), yangisini oling.
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8678044800:AAF9GGeTK1qS1dJMQayrq-J3qtKMhf39wdA")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8678044800:AAF9GGeTK1qS1dJMQayrq-J3qtKMhf39wd")
 ADMIN_IDS = [506343083]
 
 CHANNEL_LINK = "https://t.me/ilmnuri_markazi"
