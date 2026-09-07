@@ -567,10 +567,10 @@ async def video3_finish(callback: types.CallbackQuery, state: FSMContext):
 
     await callback.message.answer(
         "🌟 Assalomu alaykum!\n\n"
-        "🏆 Ilm Nuri: Kelajak Olimpiadasi botiga xush kelibsiz!\n\n"
+        "🏆 <b>Ilm Nuri: 277 milliondan ortiq grantga tanloviga xush kelibsiz!</b>\n\n"
         "📝 Testda qatnashish uchun avval ro'yxatdan o'ting.\n"
         "Ro'yxatdan o'tish 1 daqiqa davom etadi!\n\n"
-        "Quyidagi tugmani bosing 👇",
+        "Quyidagi menyuni bosing 👇",
         reply_markup=main_menu_keyboard(),
     )
 
