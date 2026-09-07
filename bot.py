@@ -69,8 +69,8 @@ SINF_LIST = [f"{i}-sinf" for i in range(1, 12)]
 # faqat matn yuboradi, bot yiqilib qolmaydi. Lekin ishlashi uchun
 # haqiqiy file_id larni albatta joylashtiring.
 VIDEO_GRANT = "BAACAgIAAxkBAAITtmqc5nuRnwPjLBcJ257TkHVCnx9oAAKApQAC3mfpSDEftErxXJ84PQQ"
-VIDEO_REGISTER = "BAACAgIAAxkBAA..."  # TODO: haqiqiy file_id qo'ying
-VIDEO_TEST = "BAACAgIAAxkBAA..."      # TODO: haqiqiy file_id qo'ying
+VIDEO_REGISTER = "BAACAgIAAxkBAAITuWqdoD5UK65SqRvCOE7Re9CuvvlwAAJopgAC3mfxSBqYvyDpSWGWPQQ"  # TODO: haqiqiy file_id qo'ying
+VIDEO_TEST = "BAACAgIAAxkBAAITvGqdoWltbsnkJt2lNQnhoZIKCXS-AAJ9pgAC3mfxSKbKYRKpBc7ePQQ"      # TODO: haqiqiy file_id qo'ying
 
 
 # ═══════════════════════════════════════════════
